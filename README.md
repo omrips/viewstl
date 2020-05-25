@@ -22,9 +22,4 @@ Create a new instance of Stl Viewer (simplest initiation - read and view STL fil
 var stl_viewer=new StlViewer(document.getElementById("stl_cont"), { models: [ {id:0, filename:"mystl.stl"} ] });
 ```
 
-important! if script files are not at the same folder as your page is - use 'load_three_files' parameter:
-```
-var stl_viewer=new StlViewer(document.getElementById("stl_cont"), {  load_three_files: **<your scripts folder>**, models: [ {id:0, filename:"mystl.stl"} ] });
-```
-
 more at https://www.viewstl.com/plugin/
