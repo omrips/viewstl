@@ -1,6 +1,7 @@
 //1.10
 //**********************************************************
-//New in 1.10 => onmousedown -> mouseclick
+//New in 1.10 => define default path for loading THREE JS files by script path (and not by html page path) - thanks venkyr!
+//New in 1.10 => get both onmousedown + onmouseclick
 //New in 1.09 => get_camera_state - get camera's info
 //New in 1.09 => set_camera_state - set camera
 
@@ -17,6 +18,8 @@
 //New in 1.08 => Returns x/y/z dimentions of a model on 'get_model_info'
 //New in 1.08 => Fixed finding file extention, thanks Rafael!
 //**********************************************************
+var stl_viewer_script_path="";
+
 function StlViewer(parent_element_obj, options)
 {
 	if (!parent_element_obj) console.log ('error: no parent element');
@@ -54,6 +57,7 @@ function StlViewer(parent_element_obj, options)
 	this.load_session=0; //usefull in more than one session of loading
 	this.loaded_models_arr=new Array(); //contain ids of loaded models
 	this.status=0; //0=all good
+	this.onmousedown_callback=null;
 	this.onmouseclick_callback=null;
 	this.zoom=-1; //-1 = auto zoom
 	this.camerax=0;
@@ -62,7 +66,8 @@ function StlViewer(parent_element_obj, options)
 	this.camera_state=null;
 	this.auto_rotate=false;
 	this.mouse_zoom=true;
-	this.load_three_files=_this.get_opt("load_three_files","");
+	//this.load_three_files=_this.get_opt("load_three_files","");
+	this.load_three_files=_this.get_opt("load_three_files", stl_viewer_script_path);
 	this.ready=(typeof THREE != 'undefined');
 	this.ready_callback=null;
 	this.auto_resize=true;
@@ -74,12 +79,15 @@ function StlViewer(parent_element_obj, options)
 	this.pre_loaded_vsj=null; //VSJ file content, waiting to be loaded (used when loading VSB)
 	this.zip_load_count=-1; //Zip files waiting to be loaded to memory (used when loading VSB)
 	
-	this.set_on_model_mouseclick = function (callback)
+	this.set_on_model_mousedown = function (callback)
 	{
-		_this.onmouseclick_callback=callback;
+		_this.onmousedown_callback=callback;
 		
-		if (_this.onmouseclick_callback)
-			_this.parent_element.addEventListener('click', _this.onmouseclick);
+		if (_this.onmousedown_callback)
+		{
+			_this.parent_element.addEventListener('click', _this.onmousedown);
+			_this.parent_element.addEventListener('touchstart', _this.onmousedown);
+		}
 	}
 	
 	this.set_drag_and_drop = function(b)
@@ -106,8 +114,8 @@ function StlViewer(parent_element_obj, options)
 		_this.all_loaded_callback=_this.get_opt("all_loaded_callback",_this.all_loaded_callback);
 		_this.load_error_callback=_this.get_opt("load_error_callback",_this.load_error_callback);
 		_this.loading_progress_callback=_this.get_opt("loading_progress_callback",_this.loading_progress_callback);
-		_this.onmouseclick_callback=_this.get_opt("on_model_mouseclick",_this.onmouseclick_callback);
-		if (!_this.onmouseclick_callback) _this.onmouseclick_callback=_this.get_opt("on_model_mousedown",null);
+		_this.onmousedown_callback=_this.get_opt("on_model_mousedown",_this.onmousedown_callback);
+		if (!_this.onmouseclick_callback) _this.onmousedown_callback=_this.get_opt("on_model_mousedown",null);
 		_this.zoom=_this.get_opt("zoom",_this.zoom); //-1 = auto zoom
 		_this.camerax=_this.get_opt("camerax",_this.camerax);
 		_this.cameray=_this.get_opt("cameray",_this.cameray);
@@ -129,7 +137,7 @@ function StlViewer(parent_element_obj, options)
 		if (_this.allow_drag_and_drop)
 			_this.set_drag_and_drop(true);
 			
-		//_this.set_on_model_mouseclick(_this.onmouseclick_callback);
+		//_this.set_on_model_mousedown(_this.onmousedown_callback);
 	}
 	
 	_this.is_ie = !!window.MSStream;
@@ -638,7 +646,7 @@ function StlViewer(parent_element_obj, options)
 		}
 	}
 
-	this.onmouseclick=function (event)
+	this.onmousedown=function (event)
 	{
 		event.preventDefault();
 		
@@ -651,8 +659,8 @@ function StlViewer(parent_element_obj, options)
 		if (intersects.length>0)
 		{
 			if (intersects[0].object.model_id===undefined) return;
-			if (_this.onmouseclick_callback)
-				_this.onmouseclick_callback(intersects[0].object.model_id);
+			if (_this.onmousedown_callback)
+				_this.onmousedown_callback(intersects[0].object.model_id);
 		}
 	}
 
@@ -1301,8 +1309,8 @@ function StlViewer(parent_element_obj, options)
 	this.miny=null;
 	this.minz=null;
 	this.edges_material=null;
-	this.raycaster=null; //used for onmouseclick events
-	this.mouse =null; //used for onmouseclick events
+	this.raycaster=null; //used for onmousedown events
+	this.mouse =null; //used for onmousedown events
 	this.scene = null;
 	this.is_webgl=null;
 	this.renderer = null;
@@ -1560,8 +1568,8 @@ function StlViewer(parent_element_obj, options)
 			_this.WORLD_Z_VECTOR=new THREE.Vector3(0, 0, 1);
 		
 			_this.edges_material=new THREE.LineBasicMaterial( { color: 0x000000 } );
-			_this.raycaster = new THREE.Raycaster(); //used for onmouseclick events
-			_this.mouse = new THREE.Vector2(); //used for onmouseclick events
+			_this.raycaster = new THREE.Raycaster(); //used for onmousedown events
+			_this.mouse = new THREE.Vector2(); //used for onmousedown events
 			
 			//this.material=new THREE.MeshLambertMaterial({color:0x909090, overdraw: 1, wireframe: false, shading:THREE.FlatShading, vertexColors: THREE.FaceColors});
 			_this.scene = new THREE.Scene();
@@ -1599,7 +1607,7 @@ function StlViewer(parent_element_obj, options)
 					break;
 			}
 			
-			_this.set_on_model_mouseclick(_this.onmouseclick_callback);
+			_this.set_on_model_mousedown(_this.onmousedown_callback);
 		}
 		
 		_this.set_bg_color(_this.bg_color);
@@ -1813,7 +1821,7 @@ function StlViewer(parent_element_obj, options)
 		if (_this.allow_drag_and_drop)
 			_this.set_drag_and_drop(true);
 			
-		_this.set_on_model_mouseclick(_this.onmouseclick_callback);
+		_this.set_on_model_mousedown(_this.onmousedown_callback);
 		
 		_this.parent_element.appendChild(_this.renderer.domElement);
 	}
@@ -1970,3 +1978,10 @@ Number.isInteger = Number.isInteger || function(value)
 		isFinite(value) && 
 		Math.floor(value) === value;
 };
+
+init = function()
+{
+	var script_path=document.currentScript.attributes['src'].value;
+	var x=script_path.lastIndexOf('/');
+	stl_viewer_script_path = x > 0 ? script_path.substring(0, x+1) : "";
+}();
