@@ -58,7 +58,6 @@ function StlViewer(parent_element_obj, options)
 	this.loaded_models_arr=new Array(); //contain ids of loaded models
 	this.status=0; //0=all good
 	this.onmousedown_callback=null;
-	this.onmouseclick_callback=null;
 	this.zoom=-1; //-1 = auto zoom
 	this.camerax=0;
 	this.cameray=0;
@@ -114,8 +113,8 @@ function StlViewer(parent_element_obj, options)
 		_this.all_loaded_callback=_this.get_opt("all_loaded_callback",_this.all_loaded_callback);
 		_this.load_error_callback=_this.get_opt("load_error_callback",_this.load_error_callback);
 		_this.loading_progress_callback=_this.get_opt("loading_progress_callback",_this.loading_progress_callback);
-		_this.onmousedown_callback=_this.get_opt("on_model_mousedown",_this.onmousedown_callback);
-		if (!_this.onmouseclick_callback) _this.onmousedown_callback=_this.get_opt("on_model_mousedown",null);
+		_this.onmousedown_callback=_this.get_opt("on_model_mousedown", _this.onmousedown_callback);
+		if (!_this.onmousedown_callback) _this.onmousedown_callback=_this.get_opt("on_model_mouseclick",null);
 		_this.zoom=_this.get_opt("zoom",_this.zoom); //-1 = auto zoom
 		_this.camerax=_this.get_opt("camerax",_this.camerax);
 		_this.cameray=_this.get_opt("cameray",_this.cameray);
@@ -285,7 +284,7 @@ function StlViewer(parent_element_obj, options)
 	{
 		if (zoom) _this.zoom=zoom;
 		
-		if ((_this.zoom_done)&&(!force_zoom)&&(_this.zoom>=0)) //don't do zoom for more than one time
+		if ((_this.zoom_done)&&(!force_zoom)&&(_this.zoom>=0)) //don't do zoom for more than once
 			return;
 			
 		_this.zoom_done=true;
@@ -660,7 +659,7 @@ function StlViewer(parent_element_obj, options)
 		{
 			if (intersects[0].object.model_id===undefined) return;
 			if (_this.onmousedown_callback)
-				_this.onmousedown_callback(intersects[0].object.model_id);
+				_this.onmousedown_callback(intersects[0].object.model_id, event);
 		}
 	}
 
