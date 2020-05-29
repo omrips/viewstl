@@ -84,7 +84,7 @@ function StlViewer(parent_element_obj, options)
 		
 		if (_this.onmousedown_callback)
 		{
-			_this.parent_element.addEventListener('click', _this.onmousedown);
+			_this.parent_element.addEventListener('mousedown', _this.onmousedown);
 			_this.parent_element.addEventListener('touchstart', _this.onmousedown);
 		}
 	}
@@ -267,15 +267,12 @@ function StlViewer(parent_element_obj, options)
 		var model=_this.models[_this.models_ref[model_id]];
 		if (!model) return;
 		
-		//_this.models.splice(_this.models_ref[model_id], 1);
-		//_this.models_ref.splice(model_id, 1);
 		delete _this.models[_this.models_ref[model_id]];
 		delete _this.models_ref[model_id];
-		_this.loaded_models_arr.splice(model_id, 1);
+		delete _this.loaded_models_arr[model_id];
 		_this.models_count=Object.keys(_this.models).length;
 		
 		_this.scene.remove(model.mesh);
-		
 	}
 	
 	//called after set of models were loaded
@@ -377,7 +374,7 @@ function StlViewer(parent_element_obj, options)
 		_this.set_zoom(-1);
 	}
 	
-	//go over ALL models forloaded/total status
+	//go over ALL models for loaded/total status
 	this.check_loading_status=function(model, loaded, total)
 	{
 		if (model)
@@ -649,8 +646,18 @@ function StlViewer(parent_element_obj, options)
 	{
 		event.preventDefault();
 		
-		_this.mouse.x = ( (event.clientX-_this.parent_element.offsetLeft) / _this.parent_element.clientWidth ) * 2 - 1;
-		_this.mouse.y = - ( (event.clientY-_this.parent_element.offsetTop) / _this.parent_element.clientHeight ) * 2 + 1;
+		switch (event.type)
+		{
+			case 'touchstart':
+				var touch = event.touches[0] || event.changedTouches[0];
+				_this.mouse.x = ( (touch.pageX-_this.parent_element.offsetLeft) / _this.parent_element.clientWidth ) * 2 - 1;
+				_this.mouse.y = - ( (touch.pageY-_this.parent_element.offsetTop) / _this.parent_element.clientHeight ) * 2 + 1;
+				break;
+				
+			default: //click
+				_this.mouse.x = ( (event.clientX-_this.parent_element.offsetLeft) / _this.parent_element.clientWidth ) * 2 - 1;
+				_this.mouse.y = - ( (event.clientY-_this.parent_element.offsetTop) / _this.parent_element.clientHeight ) * 2 + 1;
+		}
 		
 		_this.raycaster.setFromCamera( _this.mouse, _this.camera );
 		var intersects = _this.raycaster.intersectObjects( _this.scene.children );
@@ -659,7 +666,9 @@ function StlViewer(parent_element_obj, options)
 		{
 			if (intersects[0].object.model_id===undefined) return;
 			if (_this.onmousedown_callback)
-				_this.onmousedown_callback(intersects[0].object.model_id, event);
+			{
+				_this.onmousedown_callback(intersects[0].object.model_id, event, intersects[0].distance);
+			}
 		}
 	}
 
@@ -785,11 +794,9 @@ function StlViewer(parent_element_obj, options)
 			switch (model_filename.split('.').pop())
 			{
 				case 'vsj':
-					//_this.models_count--;
 					return _this.load_vsj(new_model.local_file?new_model.local_file:model_filename);
 
 				case 'vsb':
-					//_this.models_count--;
 					return _this.load_vsb(new_model.local_file?new_model.local_file:model_filename);
 							
 				//default: assumed as a regular model (STL etc.) - do nothing, continue below
@@ -827,11 +834,33 @@ function StlViewer(parent_element_obj, options)
 		_this.status=0;
 		var model_keys=Object.keys(new_models);
 		//_this.models_count+=model_keys.length;
+		
+		//count models to load
 		model_keys.forEach(function(key)
 		{
-			//if (_this.models_ref[new_models[key].id]===undefined) _this.models_count++;
-		
-			_this.add_model(new_models[key]);
+			var model_filename=_this.get_model_filename(new_models[model_keys[key]]);
+			
+			if (model_filename)
+			{
+				switch (model_filename.split('.').pop())
+				{
+					case 'vsj':
+					case 'vsb':
+						//do nothing
+						break;
+					
+					default:
+						if (_this.models_ref[new_models[key].id]===undefined) _this.models_count++;
+				}
+			}
+			else
+				if (_this.models_ref[new_models[key].id]===undefined) _this.models_count++;
+		});
+
+		//add model by model
+		model_keys.forEach(function(key)
+		{
+			_this.add_model(new_models[key], true);
 		});
 		
 		return _this.status;
@@ -1980,6 +2009,7 @@ Number.isInteger = Number.isInteger || function(value)
 
 init = function()
 {
+	if (!!window.MSStream) return; //IE
 	var script_path=document.currentScript.attributes['src'].value;
 	var x=script_path.lastIndexOf('/');
 	stl_viewer_script_path = x > 0 ? script_path.substring(0, x+1) : "";
