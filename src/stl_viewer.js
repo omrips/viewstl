@@ -2,6 +2,7 @@
 //**********************************************************
 //New in 1.10 => define default path for loading THREE JS files by script path (and not by html page path) - thanks venkyr!
 //New in 1.10 => get both onmousedown + onmouseclick
+//New in 1.10 => fix rotation issues
 //New in 1.09 => get_camera_state - get camera's info
 //New in 1.09 => set_camera_state - set camera
 
@@ -456,7 +457,7 @@ function StlViewer(parent_element_obj, options)
 		model.rotationy=model.rotationy?(model.rotationy):0;
 		model.rotationz=model.rotationz?(model.rotationz):0;
 		if (model.rotationx||model.rotationy||model.rotationz)
-			this.rotate(model.id, model.rotationx, model.rotationy, model.rotationz);
+			_this.set_rotation(model.id, model.rotationx, model.rotationy, model.rotationz);
 		
 		//scale
 		var scale=(typeof model.scale !== 'undefined')?model.scale:1;
@@ -727,37 +728,37 @@ function StlViewer(parent_element_obj, options)
 	}
 
 	//rotate the mesh around itself (which is relative to world, not for mesh)
-	//axis_x_angel, axis_y_angel, axis_z_angel - radians
-	this.rotate = function (model_id, axis_x_angel, axis_y_angel, axis_z_angel)
+	//axis_x_angel, axis_y_angel, axis_z_angel - radians - set rotation
+	this.set_rotation = function (model_id, axis_x_angel, axis_y_angel, axis_z_angel, add_to_current)
 	{
 		if (_this.models_ref[model_id]===undefined) return _this.model_error("rotate - id not found: "+model_id);
 	
 		var model=_this.models[_this.models_ref[model_id]];
 		if (!model) return;	
 
+		var c=add_to_current?1:0; //add or set angle
+
 		if (axis_x_angel)
-			_this.rotateAroundWorldAxis(model.mesh, _this.WORLD_X_VECTOR, axis_x_angel);
+			model.mesh.rotation.x=axis_x_angel+model.mesh.rotation.x*c;
 			
 		if (axis_y_angel)
-			_this.rotateAroundWorldAxis(model.mesh, _this.WORLD_Y_VECTOR, axis_y_angel);
+			model.mesh.rotation.y=axis_y_angel+model.mesh.rotation.y*c;
 			
 		if (axis_z_angel)
-			_this.rotateAroundWorldAxis(model.mesh, _this.WORLD_Z_VECTOR, axis_z_angel);
+			model.mesh.rotation.z=axis_z_angel+model.mesh.rotation.z*c;
+
+		model.mesh.updateMatrixWorld();
 
 		//if model has edges - we need to update it
 		if (model.edges)
 			_this.set_or_update_geo_edges (model, true);
-			
-		//console.log(model.mesh.getWorldRotation());
 	}
 
-	this.rotateAroundWorldAxis = function ( object, axis, radians )
+	//rotate the mesh around itself (which is relative to world, not for mesh)
+	//axis_x_angel, axis_y_angel, axis_z_angel - radians - add to current rotation
+	this.rotate = function (model_id, axis_x_angel, axis_y_angel, axis_z_angel)
 	{
-		var rotationMatrix = new THREE.Matrix4();
-		rotationMatrix.makeRotationAxis( axis, radians );
-		rotationMatrix.multiply( object.matrix );
-		object.matrix = rotationMatrix;
-		object.rotation.setFromRotationMatrix(object.matrix);
+		_this.set_rotation(model_id, axis_x_angel, axis_y_angel, axis_z_angel,true);
 	}
 
 	this.get_model_filename=function(model)
