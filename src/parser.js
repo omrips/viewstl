@@ -1,4 +1,4 @@
-//1.09
+//1.10
 function parse_3d_file(filename, s)
 {
 	//determine type of file
@@ -16,7 +16,8 @@ function parse_3d_file(filename, s)
 			return parse_vf(arrayBufferToString(s));
 			break;
 		default:
-			return "Unknown file type";
+			return parse_stl_bin(s);
+			//return "Unknown file type";
 	}
 }
 

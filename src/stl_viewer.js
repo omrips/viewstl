@@ -1,5 +1,7 @@
 //1.10
 //**********************************************************
+//New in 1.10 => Option to trigger 'no model' click event - 'send_no_model_click_event'
+//New in 1.10 => Scale always 1 for vsb file, ro avoid double scalling
 //New in 1.10 => define default path for loading THREE JS files by script path (and not by html page path) - thanks venkyr!
 //New in 1.10 => get both onmousedown + onmouseclick
 //New in 1.10 => fix rotation issues
@@ -78,6 +80,7 @@ function StlViewer(parent_element_obj, options)
 	this.pre_loaded_ab_files=null; //STL files as ArrayBuffer, waiting to be loaded (used when loading VSB)
 	this.pre_loaded_vsj=null; //VSJ file content, waiting to be loaded (used when loading VSB)
 	this.zip_load_count=-1; //Zip files waiting to be loaded to memory (used when loading VSB)
+	this.send_no_model_click_event=false; //will trigger click event even if no model was clicked (just parent element was clicked)
 	
 	this.set_on_model_mousedown = function (callback)
 	{
@@ -116,6 +119,7 @@ function StlViewer(parent_element_obj, options)
 		_this.loading_progress_callback=_this.get_opt("loading_progress_callback",_this.loading_progress_callback);
 		_this.onmousedown_callback=_this.get_opt("on_model_mousedown", _this.onmousedown_callback);
 		if (!_this.onmousedown_callback) _this.onmousedown_callback=_this.get_opt("on_model_mouseclick",null);
+		_this.send_no_model_click_event=_this.get_opt("send_no_model_click_event", _this.send_no_model_click_event);
 		_this.zoom=_this.get_opt("zoom",_this.zoom); //-1 = auto zoom
 		_this.camerax=_this.get_opt("camerax",_this.camerax);
 		_this.cameray=_this.get_opt("cameray",_this.cameray);
@@ -165,6 +169,9 @@ function StlViewer(parent_element_obj, options)
 		//_this.set_geo_minmax(model.mesh.geometry);
 		_this.set_geo_minmax(model);
 		_this.recalc_dims(model);
+		
+		model.color=model.mesh.material.color.getHexString();
+		
 		_this.scene.add(model.mesh);
 		_this.model_loaded(model.id);
 		_this.check_loading_status(model, 0, 0);
@@ -271,6 +278,14 @@ function StlViewer(parent_element_obj, options)
 		delete _this.models[_this.models_ref[model_id]];
 		delete _this.models_ref[model_id];
 		delete _this.loaded_models_arr[model_id];
+		
+		//recalc max_model_id
+		_this.max_model_id=-1;
+		Object.keys(_this.models_ref).forEach(function(key)
+		{
+			_this.max_model_id=Math.max(_this.models[_this.models_ref[key]].id, _this.max_model_id);
+		});
+		
 		_this.models_count=Object.keys(_this.models).length;
 		
 		_this.scene.remove(model.mesh);
@@ -467,9 +482,9 @@ function StlViewer(parent_element_obj, options)
 		model.scalex=scalex;
 		model.scaley=scaley;
 		model.scalez=scalez;
-						
+		
 		if ((scalex!=1)||(scaley!=1)||(scalez!=1))
-			_this.scale_geo(model.mesh.geometry,scalex,scaley,scalez);
+			_this.scale_geo(model,scalex,scaley,scalez);
 		
 		//view edges?
 		if (model.view_edges)
@@ -501,7 +516,7 @@ function StlViewer(parent_element_obj, options)
 		model.scaley=Math.max(scaley?scaley:scalex,0.01);
 		model.scalez=Math.max(scalez?scalez:scalex,0.01);
 		
-		_this.scale_geo(model.mesh.geometry,model.scalex/prev_scalex,model.scaley/prev_scaley,model.scalez/prev_scalez);
+		_this.scale_geo(model,model.scalex/prev_scalex,model.scaley/prev_scaley,model.scalez/prev_scalez);
 		
 		//if model has edges - we need to update it
 		if (model.edges)
@@ -510,8 +525,9 @@ function StlViewer(parent_element_obj, options)
 		//console.log(model.scalex+"/"+model.scaley+"/"+model.scalez);
 	}
 	
-	this.scale_geo = function(geo,scalex,scaley,scalez)
+	this.scale_geo = function(model,scalex,scaley,scalez)
 	{
+		var geo=model.mesh.geometry;
 		geo.scale(scalex,scaley,scalez);
 	}
 	
@@ -645,6 +661,7 @@ function StlViewer(parent_element_obj, options)
 
 	this.onmousedown=function (event)
 	{
+		event.stopPropagation();
 		event.preventDefault();
 		
 		switch (event.type)
@@ -671,6 +688,8 @@ function StlViewer(parent_element_obj, options)
 				_this.onmousedown_callback(intersects[0].object.model_id, event, intersects[0].distance);
 			}
 		}
+		else if (_this.send_no_model_click_event)
+			_this.onmousedown_callback(null, event, 0);
 	}
 
 	//will return if value is empty (null/undefined etc.) and not zero (which is valid)
@@ -739,13 +758,22 @@ function StlViewer(parent_element_obj, options)
 		var c=add_to_current?1:0; //add or set angle
 
 		if (axis_x_angel)
-			model.mesh.rotation.x=axis_x_angel+model.mesh.rotation.x*c;
+		{
+			model.rotationx=axis_x_angel+model.mesh.rotation.x*c;
+			model.mesh.rotation.x=model.rotationx;
+		}
 			
 		if (axis_y_angel)
-			model.mesh.rotation.y=axis_y_angel+model.mesh.rotation.y*c;
+		{
+			model.rotationy=axis_y_angel+model.mesh.rotation.y*c;
+			model.mesh.rotation.y=model.rotationy;
+		}
 			
 		if (axis_z_angel)
-			model.mesh.rotation.z=axis_z_angel+model.mesh.rotation.z*c;
+		{
+			model.rotationz=axis_y_angel+model.mesh.rotation.y*c;
+			model.mesh.rotation.z=model.rotationz;
+		}
 
 		model.mesh.updateMatrixWorld();
 
@@ -761,19 +789,20 @@ function StlViewer(parent_element_obj, options)
 		_this.set_rotation(model_id, axis_x_angel, axis_y_angel, axis_z_angel,true);
 	}
 
-	this.get_model_filename=function(model)
+	this.get_model_filename=function(model, no_null)
 	{
+		if (model.orig_filename) return model.orig_filename;
 		if (model.temp_filename) return model.temp_filename;
 		if (model.orig_url) return model.orig_url;
 		if (model.local_file) if (model.local_file.name) return model.local_file.name;
-		
-		if (model.orig_filename) return model.orig_filename;
 		
 		if (model.filename)
 		{
 			if (model.filename instanceof File) return File.name
 			return model.filename;
 		}
+		
+		if (no_null) return 'model_'+model.id+'.stl'; //relevant for manually added meshes
 		
 		return null;
 	}
@@ -803,7 +832,6 @@ function StlViewer(parent_element_obj, options)
 				//default: assumed as a regular model (STL etc.) - do nothing, continue below
 			}
 		}
-		
 		
 		if (typeof(new_model.id) == 'undefined') new_model.id=-1;
 		var model_error=_this.error_in_model(new_model);
@@ -931,10 +959,10 @@ function StlViewer(parent_element_obj, options)
 		//console.log(files_arr);
 		//console.log(_this.get_vsj(true));
 	
-		return {vsj:_this.get_vsj(true,true), files:files_arr};
+		return {vsj:_this.get_vsj(true,true,true), files:files_arr};
 	}
 
-	this.get_vsj = function(as_js_obj, force_basename)
+	this.get_vsj = function(as_js_obj, force_basename, for_vsb)
 	{
 		//get object info in json format
 		var pos=_this.camera.position;
@@ -946,8 +974,16 @@ function StlViewer(parent_element_obj, options)
 			var model=_this.models[_this.models_ref[key]];
 			var info={id:model.id};
 			
-			if (model.filename) info['filename']=force_basename?_this.basename(model.filename):model.filename;
-			if (model.local_file) info['local_file']=model.local_file;
+			if (for_vsb)
+			{
+				var curr_filename=_this.get_model_filename(model, true);
+				if (curr_filename) info['filename']=force_basename?_this.basename(curr_filename):curr_filename;
+			}
+			else
+			{
+				if (model.filename) info['filename']=force_basename?_this.basename(model.filename):model.filename;
+				if (model.local_file) info['local_file']=model.local_file;
+			}
 			if (model.x) info['x']=model.x;
 			if (model.y) info['y']=model.y;
 			if (model.z) info['z']=model.z;
@@ -956,10 +992,10 @@ function StlViewer(parent_element_obj, options)
 			if (model.rotationx) info['rotationx']=model.rotationx;
 			if (model.rotationy) info['rotationy']=model.rotationy;
 			if (model.rotationz) info['rotationz']=model.rotationz;
-			if (model.scale!==undefined) if (model.scale!=1) info['scale']=model.scale;
-			if (model.scalex!=1) info['scalex']=model.scalex;
-			if (model.scaley!=1) info['scaley']=model.scaley;
-			if (model.scalez!=1) info['scalez']=model.scalez;
+			if ((model.scale!==undefined)&&(!for_vsb)) if (model.scale!=1) info['scale']=model.scale;
+			if ((model.scalex!=1)&&(!for_vsb)) info['scalex']=model.scalex; //in vsb the scale will always be 1, in order to skip scaling when the vsb will be loaded (to avoid double scaling as the geometry is already scalled)
+			if ((model.scaley!=1)&&(!for_vsb)) info['scaley']=model.scaley;
+			if ((model.scalez!=1)&&(!for_vsb)) info['scalez']=model.scalez;
 			if (model.opacity!==undefined) if (model.opacity!=1) info['opacity']=model.opacity;
 			if (model.view_edges) info['view_edges']=model.view_edges;
 			if (model.animation)
@@ -969,12 +1005,13 @@ function StlViewer(parent_element_obj, options)
 				delete info['animation'].last_time;
 			}
 			
-			data['models'].push(info);
+			//data['models'].push(info);
+			data['models'][_this.models_ref[key]]=info;
 			
 			
 		});
 
-		return as_js_obj?data:JSON.stringify(data);
+		return as_js_obj?data:_this.json_without_nulls(data);
 	}
 
 	this.download_vsj = function(filename)
@@ -1147,6 +1184,11 @@ function StlViewer(parent_element_obj, options)
 		return str.substr(str.lastIndexOf('/') + 1); 
 	}
 
+	this.json_without_nulls=function(arr)
+	{
+		return JSON.stringify(arr).split(",null").join("");
+	}
+
 	this.download_vsb = function(filename)
 	{
 		var zip=null;
@@ -1162,10 +1204,12 @@ function StlViewer(parent_element_obj, options)
 	
 		var vsb=_this.get_vsb();
 	
-		zip.file("json_data.vsj", JSON.stringify(vsb.vsj));
+		zip.file("json_data.vsj", _this.json_without_nulls(vsb.vsj));
 		Object.keys(vsb.files).forEach(function(key)
 		{
-			zip.file(_this.basename(vsb.vsj.models[_this.models_ref[vsb.files[key].id]].filename), vsb.files[key].bin);
+			//console.log("KEY: ",key,vsb.files[key],_this.models_ref,_this.models_ref[vsb.files[key].id],vsb.vsj.models);
+			var curr_filename=_this.get_model_filename(vsb.vsj.models[_this.models_ref[vsb.files[key].id]], true);
+			zip.file(_this.basename(curr_filename), vsb.files[key].bin);
 		});
 		
 		zip.generateAsync({type:"blob"})
@@ -1578,7 +1622,6 @@ function StlViewer(parent_element_obj, options)
 		if (!animation) return _this.remove_model_animation(model,true,true);
 	
 		model.animation=JSON.parse(JSON.stringify(animation)); //cloning the animation object
-		
 		
 		if (model.animation.delta) if (!model.animation.delta.msec) model.animation.delta.msec=300;
 		if (model.animation.exact) if (!model.animation.exact.msec) model.animation.exact.msec=300;

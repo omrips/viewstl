@@ -1,4 +1,4 @@
-//1.09
+//1.10
 //load STL file info geometry and returns it
 
 importScripts("parser.min.js");
