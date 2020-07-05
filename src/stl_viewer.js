@@ -789,17 +789,23 @@ function StlViewer(parent_element_obj, options)
 		_this.set_rotation(model_id, axis_x_angel, axis_y_angel, axis_z_angel,true);
 	}
 
+	//no path, with ext
+	this.basename=function (filename)
+	{
+		return filename.split(/[\\/]/).pop();
+	}
+
 	this.get_model_filename=function(model, no_null)
 	{
-		if (model.orig_filename) return model.orig_filename;
-		if (model.temp_filename) return model.temp_filename;
-		if (model.orig_url) return model.orig_url;
-		if (model.local_file) if (model.local_file.name) return model.local_file.name;
+		if (model.orig_filename) return _this.basename(model.orig_filename);
+		if (model.temp_filename) return _this.basename(model.temp_filename);
+		if (model.orig_url) return _this.basename(model.orig_url);
+		if (model.local_file) if (model.local_file.name) return _this.basename(model.local_file.name);
 		
 		if (model.filename)
 		{
-			if (model.filename instanceof File) return File.name
-			return model.filename;
+			if (model.filename instanceof File) return _this.basename(File.name)
+			return _this.basename(model.filename);
 		}
 		
 		if (no_null) return 'model_'+model.id+'.stl'; //relevant for manually added meshes
@@ -1024,6 +1030,13 @@ function StlViewer(parent_element_obj, options)
 		if (p>=0) download_name=download_name.substring( 0, p );
 		if (download_name.length<1) download_name='1';
 		
+		if (window.navigator.msSaveOrOpenBlob)
+		{
+			//only for IE
+			window.navigator.msSaveBlob(blob, download_name+'.vsj');
+			return;
+		}
+		
 		link.download = download_name+'.vsj';
 		link.click();
 	}
@@ -1216,12 +1229,21 @@ function StlViewer(parent_element_obj, options)
 			.then(function(content)
 			{
 				var blob = new Blob([content], {type: "application/zip"});
+				
 				var link = document.createElement("a");
 				link.href = window.URL.createObjectURL(blob);
 				var download_name=filename?filename:"1";
 				var p=download_name.toLowerCase().indexOf('.vsb');
 				if (p>=0) download_name=download_name.substring( 0, p );
 				if (download_name.length<1) download_name='1';
+				
+				if (window.navigator.msSaveOrOpenBlob)
+				{
+					//only for IE
+					window.navigator.msSaveBlob(blob, download_name+'.vsb');
+					return;
+				}
+
 				
 				link.download = download_name+'.vsb';
 				link.click();
@@ -1338,10 +1360,19 @@ function StlViewer(parent_element_obj, options)
 		var blob = new Blob([_this.get_stl_bin(model_id)], {type: "application/sla"});
 		var link = document.createElement("a");
 		link.href = window.URL.createObjectURL(blob);
-		var download_name=filename?filename:(model.filename?model.filename:(model.local_file?model.local_file.name:"1"));
+		//var download_name=filename?filename:(model.filename?model.filename:(model.local_file?model.local_file.name:"1"));
+		var download_name=_this.get_model_filename(model,true);
+		console.log(download_name);
 		var p=download_name.toLowerCase().indexOf('.stl');
 		if (p>=0) download_name=download_name.substring( 0, p );
 		if (download_name.length<1) download_name='1';
+		
+		if (window.navigator.msSaveOrOpenBlob)
+		{
+			//only for IE
+			window.navigator.msSaveBlob(blob, download_name+'.stl');
+			return;
+		}
 		
 		link.download = download_name+'.stl';
 		link.click();
