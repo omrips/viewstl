@@ -771,7 +771,7 @@ function StlViewer(parent_element_obj, options)
 			
 		if (axis_z_angel)
 		{
-			model.rotationz=axis_y_angel+model.mesh.rotation.y*c;
+			model.rotationz=axis_z_angel+model.mesh.rotation.z*c;
 			model.mesh.rotation.z=model.rotationz;
 		}
 
@@ -795,22 +795,29 @@ function StlViewer(parent_element_obj, options)
 		return filename.split(/[\\/]/).pop();
 	}
 
-	this.get_model_filename=function(model, no_null)
+	this.get_model_filename=function(model, no_null, basename, skip_url)
 	{
-		if (model.orig_filename) return _this.basename(model.orig_filename);
-		if (model.temp_filename) return _this.basename(model.temp_filename);
-		if (model.orig_url) return _this.basename(model.orig_url);
-		if (model.local_file) if (model.local_file.name) return _this.basename(model.local_file.name);
+		var fn=null;
 		
-		if (model.filename)
+		if ((model.orig_url)&&(!skip_url)) fn=decodeURIComponent(model.orig_url);
+		else if (model.orig_filename) fn=model.orig_filename;
+		else if (model.temp_filename) fn=model.temp_filename;
+		else if (model.local_file)
 		{
-			if (model.filename instanceof File) return _this.basename(File.name)
-			return _this.basename(model.filename);
+			if (model.local_file.name) fn=model.local_file.name;
+		}
+		else if (model.filename)
+		{
+			if (model.filename instanceof File) fn=File.name;
+			fn=model.filename;
 		}
 		
-		if (no_null) return 'model_'+model.id+'.stl'; //relevant for manually added meshes
+		if (!fn) if (no_null) return 'model_'+model.id+'.stl'; //relevant for manually added meshes
+		if (!fn) return null;
 		
-		return null;
+		if (basename) fn=_this.basename(fn);
+		
+		return fn;
 	}
 
 	this.add_model = function(new_model, dont_add_to_model_count)
@@ -982,12 +989,14 @@ function StlViewer(parent_element_obj, options)
 			
 			if (for_vsb)
 			{
-				var curr_filename=_this.get_model_filename(model, true);
-				if (curr_filename) info['filename']=force_basename?_this.basename(curr_filename):curr_filename;
+				//console.log(model);
+				var curr_filename=_this.get_model_filename(model, true, true, true);
+				if (curr_filename) info['filename']=curr_filename;
 			}
 			else
 			{
-				if (model.filename) info['filename']=force_basename?_this.basename(model.filename):model.filename;
+				var curr_filename=_this.get_model_filename(model, true, force_basename);
+				if (curr_filename) info['filename']=curr_filename;
 				if (model.local_file) info['local_file']=model.local_file;
 			}
 			if (model.x) info['x']=model.x;
@@ -1221,8 +1230,8 @@ function StlViewer(parent_element_obj, options)
 		Object.keys(vsb.files).forEach(function(key)
 		{
 			//console.log("KEY: ",key,vsb.files[key],_this.models_ref,_this.models_ref[vsb.files[key].id],vsb.vsj.models);
-			var curr_filename=_this.get_model_filename(vsb.vsj.models[_this.models_ref[vsb.files[key].id]], true);
-			zip.file(_this.basename(curr_filename), vsb.files[key].bin);
+			var curr_filename=_this.get_model_filename(vsb.vsj.models[_this.models_ref[vsb.files[key].id]], true, true);
+			zip.file(curr_filename, vsb.files[key].bin);
 		});
 		
 		zip.generateAsync({type:"blob"})
@@ -1361,7 +1370,7 @@ function StlViewer(parent_element_obj, options)
 		var link = document.createElement("a");
 		link.href = window.URL.createObjectURL(blob);
 		//var download_name=filename?filename:(model.filename?model.filename:(model.local_file?model.local_file.name:"1"));
-		var download_name=_this.get_model_filename(model,true);
+		var download_name=_this.get_model_filename(model,true,true,true);
 		console.log(download_name);
 		var p=download_name.toLowerCase().indexOf('.stl');
 		if (p>=0) download_name=download_name.substring( 0, p );
