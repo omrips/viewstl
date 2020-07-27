@@ -1,5 +1,6 @@
 //1.10
 //**********************************************************
+//New in 1.10 => mm/inch settings
 //New in 1.10 => Option to trigger 'no model' click event - 'send_no_model_click_event'
 //New in 1.10 => Scale always 1 for vsb file, ro avoid double scalling
 //New in 1.10 => define default path for loading THREE JS files by script path (and not by html page path) - thanks venkyr!
@@ -297,7 +298,8 @@ function StlViewer(parent_element_obj, options)
 	{
 		if (zoom) _this.zoom=zoom;
 		
-		if ((_this.zoom_done)&&(!force_zoom)&&(_this.zoom>=0)) //don't do zoom for more than once
+		//if ((_this.zoom_done)&&(!force_zoom)&&(_this.zoom>=0)) //don't do zoom for more than once
+		if ((_this.zoom_done)&&(!force_zoom)) //don't do zoom for more than once
 			return;
 			
 		_this.zoom_done=true;
@@ -377,6 +379,7 @@ function StlViewer(parent_element_obj, options)
 	this.stop_auto_zoom=function ()
 	{
 		_this.zoom=_this.camera.position.z;
+		_this.zoom_done=true;
 	}	
 	
 	this.set_camera=function (x,y,z)
@@ -451,6 +454,10 @@ function StlViewer(parent_element_obj, options)
 	//set model custome properties
 	this.set_model_custom_props = function (model)
 	{
+		//units
+		model.units=model.units?model.units:'mm';
+		_this.set_model_units(model.id, model.units, true);
+	
 		//position
 		model.x=model.x?model.x:0;
 		model.y=model.y?model.y:0;
@@ -578,6 +585,9 @@ function StlViewer(parent_element_obj, options)
 		if (!model) return;
 		if (!model.mesh) return;
 		
+		if (color.length<6) return;
+		if (color.charAt(0)!='#') color='#'+color;
+		
 		model.color=color;
 		
 		_this.update_mesh_color(model.mesh, color, color?false:model.colors);
@@ -698,6 +708,41 @@ function StlViewer(parent_element_obj, options)
 		return (!a && a !== 0);
 	}
 
+	this.set_model_units = function(model_id, units, scale)
+	{
+		if (_this.models_ref[model_id]===undefined) return _this.model_error("set_model_units - id not found: "+model_id);
+	
+		var model=_this.models[_this.models_ref[model_id]];
+		if (!model) return;
+		if (!model.mesh) return;
+	
+		var scale_factor=1;
+		switch (units)
+		{
+			case 'mm':
+				if (scale) if (model.units=='inch') scale_factor=1/25.4;
+				model.units='mm';
+				break;
+				
+			case 'inch':
+				if (scale) if (model.units=='mm') scale_factor=25.4;
+				model.units='inch';
+				break;
+				
+			default:
+				return _this.model_error("set_model_units - invalid unit "+units);
+		}
+
+		if (scale_factor!=1)
+		{		
+			_this.set_scale(model.id,
+			model.scalex*scale_factor,
+			model.scaley*scale_factor,
+			model.scalez*scale_factor
+			);
+		}
+	}
+
 	this.set_position = function(model_id, x,y,z)
 	{
 		if (_this.models_ref[model_id]===undefined) return _this.model_error("set_position - id not found: "+model_id);
@@ -794,6 +839,7 @@ function StlViewer(parent_element_obj, options)
 	{
 		return filename.split(/[\\/]/).pop();
 	}
+
 
 	this.get_model_filename=function(model, no_null, basename, skip_url)
 	{
@@ -908,7 +954,7 @@ function StlViewer(parent_element_obj, options)
 		return _this.status;
 	}
 
-	this.calc_volume_and_area=function(geo)
+	this.calc_volume_and_area=function(geo, factor)
 	{
 		var x1,x2,x3,y1,y2,y3,z1,z2,z3,i;
 		var len=geo.faces.length;
@@ -918,15 +964,15 @@ function StlViewer(parent_element_obj, options)
 				
 		for (i=0;i<len;i++)
 		{
-			x1=geo.vertices[geo.faces[i].a].x;
-			y1=geo.vertices[geo.faces[i].a].y;
-			z1=geo.vertices[geo.faces[i].a].z;
-			x2=geo.vertices[geo.faces[i].b].x;
-			y2=geo.vertices[geo.faces[i].b].y;
-			z2=geo.vertices[geo.faces[i].b].z;
-			x3=geo.vertices[geo.faces[i].c].x;
-			y3=geo.vertices[geo.faces[i].c].y;
-			z3=geo.vertices[geo.faces[i].c].z;
+			x1=geo.vertices[geo.faces[i].a].x*factor;
+			y1=geo.vertices[geo.faces[i].a].y*factor;
+			z1=geo.vertices[geo.faces[i].a].z*factor;
+			x2=geo.vertices[geo.faces[i].b].x*factor;
+			y2=geo.vertices[geo.faces[i].b].y*factor;
+			z2=geo.vertices[geo.faces[i].b].z*factor;
+			x3=geo.vertices[geo.faces[i].c].x*factor;
+			y3=geo.vertices[geo.faces[i].c].y*factor;
+			z3=geo.vertices[geo.faces[i].c].z*factor;
 					
 			totalVolume += 
 				(-x3 * y2 * z1 + 
@@ -936,9 +982,9 @@ function StlViewer(parent_element_obj, options)
 				x2 * y1 * z3 + 
 				x1 * y2 * z3);
 						
-			a=geo.vertices[geo.faces[i].a].distanceTo(geo.vertices[geo.faces[i].b]);
-			b=geo.vertices[geo.faces[i].b].distanceTo(geo.vertices[geo.faces[i].c]);
-			c=geo.vertices[geo.faces[i].c].distanceTo(geo.vertices[geo.faces[i].a]);
+			a=geo.vertices[geo.faces[i].a].distanceTo(geo.vertices[geo.faces[i].b])*factor;
+			b=geo.vertices[geo.faces[i].b].distanceTo(geo.vertices[geo.faces[i].c])*factor;
+			c=geo.vertices[geo.faces[i].c].distanceTo(geo.vertices[geo.faces[i].a])*factor;
 			s=(a+b+c)/2;
 			totalArea+=Math.sqrt(s*(s-a)*(s-b)*(s-c));
 		}
@@ -956,8 +1002,8 @@ function StlViewer(parent_element_obj, options)
 		if (!model.mesh) return null;
 		if (!model.mesh.geometry) return null;
 		
-		var vol_and_area=model.mesh.geometry?_this.calc_volume_and_area(model.mesh.geometry):[0,0,0];
-		return {name:model.filename?model.filename:(model.local_file?model.local_file.name:""), orig_filename:model.orig_filename?model.orig_filename:null, position:{x:model.x, y:model.y, z:model.z}, dims:{x:model.mesh.geometry.maxx-model.mesh.geometry.minx, y:model.mesh.geometry.maxy-model.mesh.geometry.miny, z:model.mesh.geometry.maxz-model.mesh.geometry.minz}, rotation:{x:model.mesh.rotation.x,y:model.mesh.rotation.y,z:model.mesh.rotation.z}, display:model.display?model.display:null, color:model.color?model.color:null, scale:{x:model.scalex,y:model.scaley,z:model.scalez}, volume:vol_and_area[0], area:vol_and_area[1], triangles:vol_and_area[2]};
+		var vol_and_area=model.mesh.geometry?_this.calc_volume_and_area(model.mesh.geometry, model.units=='inch'?1/25.4:1):[0,0,0];
+		return {name:model.filename?model.filename:(model.local_file?model.local_file.name:""), orig_filename:model.orig_filename?model.orig_filename:null, position:{x:model.x, y:model.y, z:model.z}, dims:{x:model.mesh.geometry.maxx-model.mesh.geometry.minx, y:model.mesh.geometry.maxy-model.mesh.geometry.miny, z:model.mesh.geometry.maxz-model.mesh.geometry.minz}, rotation:{x:model.mesh.rotation.x,y:model.mesh.rotation.y,z:model.mesh.rotation.z}, display:model.display?model.display:null, color:model.color?model.color:null, scale:{x:model.scalex,y:model.scaley,z:model.scalez}, volume:vol_and_area[0], area:vol_and_area[1], triangles:vol_and_area[2], units:model.units};
 	}
 
 	this.get_vsb = function()
@@ -999,11 +1045,13 @@ function StlViewer(parent_element_obj, options)
 				if (curr_filename) info['filename']=curr_filename;
 				if (model.local_file) info['local_file']=model.local_file;
 			}
+			
 			if (model.x) info['x']=model.x;
 			if (model.y) info['y']=model.y;
 			if (model.z) info['z']=model.z;
 			if (model.display) info['display']=model.display;
 			if (model.color) info['color']=model.color;
+			if (model.units) info['units']=model.units;
 			if (model.rotationx) info['rotationx']=model.rotationx;
 			if (model.rotationy) info['rotationy']=model.rotationy;
 			if (model.rotationz) info['rotationz']=model.rotationz;
@@ -1371,7 +1419,7 @@ function StlViewer(parent_element_obj, options)
 		link.href = window.URL.createObjectURL(blob);
 		//var download_name=filename?filename:(model.filename?model.filename:(model.local_file?model.local_file.name:"1"));
 		var download_name=_this.get_model_filename(model,true,true,true);
-		console.log(download_name);
+		
 		var p=download_name.toLowerCase().indexOf('.stl');
 		if (p>=0) download_name=download_name.substring( 0, p );
 		if (download_name.length<1) download_name='1';
