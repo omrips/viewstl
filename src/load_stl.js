@@ -28,7 +28,7 @@ self.addEventListener("message", function(e)
 			
 			if (e.data.data.local_file)
 			{
-				filename=e.data.data.local_file.name;
+				filename=e.data.data.local_file.name?e.data.data.local_file.name:e.data.data.filename; //filename property is usefull for blob files, 10x Fraser
 				local_file=e.data.data.local_file?e.data.data.local_file:null;
 			}
 			else if (e.data.data.filename)
