@@ -1,5 +1,8 @@
 //1.10
 //**********************************************************
+//New in 1.10 => fix issue with colored STL on vsb
+//New in 1.10 => make all vsb ids -1
+//New in 1.10 => fixed issue with mesh cloning
 //New in 1.10 => mm/inch settings
 //New in 1.10 => Option to trigger 'no model' click event - 'send_no_model_click_event'
 //New in 1.10 => Scale always 1 for vsb file, ro avoid double scalling
@@ -8,7 +11,6 @@
 //New in 1.10 => fix rotation issues
 //New in 1.09 => get_camera_state - get camera's info
 //New in 1.09 => set_camera_state - set camera
-
 //New in 1.09 => Returns 'orig_filename' optional parameter at 'get_model_info'
 //New in 1.09 => 'get_vsj' - returns object current stands as json, files not included
 //New in 1.09 => 'download_vsj' - download json descriptor of current scene
@@ -171,7 +173,7 @@ function StlViewer(parent_element_obj, options)
 		_this.set_geo_minmax(model);
 		_this.recalc_dims(model);
 		
-		model.color=model.mesh.material.color.getHexString();
+		model.color='#'+model.mesh.material.color.getHexString();
 		
 		_this.scene.add(model.mesh);
 		_this.model_loaded(model.id);
@@ -1031,13 +1033,14 @@ function StlViewer(parent_element_obj, options)
 		Object.keys(_this.models_ref).forEach(function(key)
 		{
 			var model=_this.models[_this.models_ref[key]];
-			var info={id:model.id};
-			
+			var info={id:for_vsb?-1:model.id};
+
 			if (for_vsb)
 			{
 				//console.log(model);
-				var curr_filename=_this.get_model_filename(model, true, true, true);
-				if (curr_filename) info['filename']=curr_filename;
+				//var curr_filename=_this.get_model_filename(model, true, true, true);
+				//if (curr_filename) info['filename']=curr_filename;
+				info['filename']=model.id+'.stl';
 			}
 			else
 			{
@@ -1050,7 +1053,7 @@ function StlViewer(parent_element_obj, options)
 			if (model.y) info['y']=model.y;
 			if (model.z) info['z']=model.z;
 			if (model.display) info['display']=model.display;
-			if (model.color) info['color']=model.color;
+			if (!((model.colors)&&(model.color=='#ffffff'))) if (model.color) info['color']=model.color; //if model is colored stl and the color is #FFFFFF, skip color property (cause this is the defauly for colored STL)
 			if (model.units) info['units']=model.units;
 			if (model.rotationx) info['rotationx']=model.rotationx;
 			if (model.rotationy) info['rotationy']=model.rotationy;
@@ -1443,7 +1446,10 @@ function StlViewer(parent_element_obj, options)
 		if (!model) return;
 		if (!model.mesh) return;
 		
-		return model.mesh.clone();
+		var mesh=model.mesh.clone();
+		mesh.geometry=model.mesh.geometry.clone();
+		mesh.material=model.mesh.material.clone();
+		return mesh;
 	}
 
 
