@@ -1,5 +1,6 @@
 //1.10
 //**********************************************************
+//New in 1.10 => fix issue with rotation at 0 angle
 //New in 1.10 => fix issue with colored STL on vsb
 //New in 1.10 => make all vsb ids -1
 //New in 1.10 => fixed issue with mesh cloning
@@ -68,6 +69,7 @@ function StlViewer(parent_element_obj, options)
 	this.camerax=0;
 	this.cameray=0;
 	this.cameraz=0;
+
 	this.camera_state=null;
 	this.auto_rotate=false;
 	this.mouse_zoom=true;
@@ -500,7 +502,7 @@ function StlViewer(parent_element_obj, options)
 			_this.set_or_update_geo_edges (model, true);
 			
 		//opacity
-		if (model.opacity)
+		if (typeof model.opacity !== 'undefined')
 			this.set_material_opacity(model.mesh.material, model.opacity);
 			
 		//animation
@@ -649,10 +651,11 @@ function StlViewer(parent_element_obj, options)
 	this.set_opacity = function(model_id, opacity)
 	{
 		if (_this.models_ref[model_id]===undefined) return _this.model_error("set_display - id not found: "+model_id);
-	
+
 		var model=_this.models[_this.models_ref[model_id]];
 		if (!model) return;
 		
+		model.opacity=opacity;
 		this.set_material_opacity(model.mesh.material, opacity);
 	}
 
@@ -804,19 +807,19 @@ function StlViewer(parent_element_obj, options)
 
 		var c=add_to_current?1:0; //add or set angle
 
-		if (axis_x_angel)
+		if (axis_x_angel!==undefined)
 		{
 			model.rotationx=axis_x_angel+model.mesh.rotation.x*c;
 			model.mesh.rotation.x=model.rotationx;
 		}
 			
-		if (axis_y_angel)
+		if (axis_y_angel!==undefined)
 		{
 			model.rotationy=axis_y_angel+model.mesh.rotation.y*c;
 			model.mesh.rotation.y=model.rotationy;
 		}
 			
-		if (axis_z_angel)
+		if (axis_z_angel!==undefined)
 		{
 			model.rotationz=axis_z_angel+model.mesh.rotation.z*c;
 			model.mesh.rotation.z=model.rotationz;
@@ -1005,7 +1008,7 @@ function StlViewer(parent_element_obj, options)
 		if (!model.mesh.geometry) return null;
 		
 		var vol_and_area=model.mesh.geometry?_this.calc_volume_and_area(model.mesh.geometry, model.units=='inch'?1/25.4:1):[0,0,0];
-		return {name:model.filename?model.filename:(model.local_file?model.local_file.name:""), orig_filename:model.orig_filename?model.orig_filename:null, position:{x:model.x, y:model.y, z:model.z}, dims:{x:model.mesh.geometry.maxx-model.mesh.geometry.minx, y:model.mesh.geometry.maxy-model.mesh.geometry.miny, z:model.mesh.geometry.maxz-model.mesh.geometry.minz}, rotation:{x:model.mesh.rotation.x,y:model.mesh.rotation.y,z:model.mesh.rotation.z}, display:model.display?model.display:null, color:model.color?model.color:null, scale:{x:model.scalex,y:model.scaley,z:model.scalez}, volume:vol_and_area[0], area:vol_and_area[1], triangles:vol_and_area[2], units:model.units};
+		return {name:model.filename?model.filename:(model.local_file?model.local_file.name:""), orig_filename:model.orig_filename?model.orig_filename:null, position:{x:model.x, y:model.y, z:model.z}, dims:{x:model.mesh.geometry.maxx-model.mesh.geometry.minx, y:model.mesh.geometry.maxy-model.mesh.geometry.miny, z:model.mesh.geometry.maxz-model.mesh.geometry.minz}, rotation:{x:model.mesh.rotation.x,y:model.mesh.rotation.y,z:model.mesh.rotation.z}, display:model.display?model.display:null, color:model.color?model.color:null, scale:{x:model.scalex,y:model.scaley,z:model.scalez}, volume:vol_and_area[0], area:vol_and_area[1], triangles:vol_and_area[2], units:model.units, opacity:model.opacity!==undefined?model.opacity:1};
 	}
 
 	this.get_vsb = function()
