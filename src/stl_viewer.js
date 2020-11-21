@@ -1,5 +1,7 @@
-//1.10
+//1.11
 //**********************************************************
+//New in 1.11 => set grid
+//New in 1.10 => revoke dataURLs
 //New in 1.10 => fix issue with rotation at 0 angle
 //New in 1.10 => fix issue with colored STL on vsb
 //New in 1.10 => make all vsb ids -1
@@ -50,7 +52,7 @@ function StlViewer(parent_element_obj, options)
 	this.canvas_width="100%";
 	this.canvas_height="100%";
 	this.bg_color="transparent";
-	this.models_to_add=null; //at start
+	this.models_to_add=[]; //at start
 	this.models=new Array();
 	this.models_count=0;
 	this.models_ref=new Array(); //models with index - direct reference from id(comes from user) to model array (above)
@@ -86,6 +88,7 @@ function StlViewer(parent_element_obj, options)
 	this.pre_loaded_vsj=null; //VSJ file content, waiting to be loaded (used when loading VSB)
 	this.zip_load_count=-1; //Zip files waiting to be loaded to memory (used when loading VSB)
 	this.send_no_model_click_event=false; //will trigger click event even if no model was clicked (just parent element was clicked)
+	this.grid=null; //draw grid over scene
 	
 	this.set_on_model_mousedown = function (callback)
 	{
@@ -116,7 +119,7 @@ function StlViewer(parent_element_obj, options)
 	{
 		_this.canvas_width=_this.get_opt("width",_this.canvas_width);
 		_this.canvas_height=_this.get_opt("height",_this.canvas_height);
-		_this.bg_color=_this.get_opt("bgcolor",_this.bg_color);
+		_this.bg_color=_this.get_opt("bg_color",_this.bg_color);
 		_this.models_to_add=_this.get_opt("models",_this.models_to_add);
 		_this.model_loaded_callback=_this.get_opt("model_loaded_callback",_this.model_loaded_callback);
 		_this.all_loaded_callback=_this.get_opt("all_loaded_callback",_this.all_loaded_callback);
@@ -135,6 +138,7 @@ function StlViewer(parent_element_obj, options)
 		_this.on_model_drop=_this.get_opt("on_model_drop",_this.on_model_drop);
 		_this.center_models=_this.get_opt("center_models",_this.center_models);
 		_this.controls_type=_this.get_opt("controls", _this.controls_type);
+		_this.grid=_this.get_opt("grid",_this.grid?true:false); //now it is boolean, later it will be grid helper object
 		if (_this.zoom>=0)
 			_this.cameraz=_this.zoom;
 		else
@@ -202,7 +206,8 @@ function StlViewer(parent_element_obj, options)
 					if (geo)
 					{
 						//if (!geo.boundingBox) geo.computeBoundingBox();
-						var material=new THREE.MeshLambertMaterial({color:0x909090, overdraw: 1, wireframe: false, vertexColors: model.color?THREE.NoColors:THREE.FaceColors}); //if model color is set, ignores face colors set on the STL file itself (if any)
+						//var material=new THREE.MeshLambertMaterial({color:0x909090, overdraw: 1, wireframe: false, vertexColors: model.color?THREE.NoColors:THREE.FaceColors}); //if model color is set, ignores face colors set on the STL file itself (if any)
+						var material=new THREE.MeshLambertMaterial({color:0x909090, wireframe: false, vertexColors: model.color?THREE.NoColors:THREE.FaceColors}); //if model color is set, ignores face colors set on the STL file itself (if any)
 						if (!_this.is_ie) material.side = THREE.DoubleSide;
 						if (!model.display) model.display="flat";
 						_this.set_material_display(model.display, material, geo); //shading (aka display)
@@ -263,6 +268,7 @@ function StlViewer(parent_element_obj, options)
 				_this.camera_state=null; //it is one time thingy (next bunch of models will have to set camera state again)
 			
 			_this.set_light();
+			_this.set_grid(_this.grid?true:false);
 		
 			_this.load_session++; //from now on it is a new loading session
 			
@@ -273,6 +279,26 @@ function StlViewer(parent_element_obj, options)
 		}
 	}
 	
+	this.set_grid=function(b, size, divisions)
+	{
+		if (_this.grid) _this.scene.remove(_this.grid);
+		_this.grid=null;
+
+		if (b)
+		{
+			if (!size) size=Math.max(Math.abs(_this.maxx),Math.abs(_this.minx))*2.5;
+			if (size<=0)
+			{
+				var height = isNaN(window.innerHeight) ? window.clientHeight : window.innerHeight;
+				var width = isNaN(window.innerWidth) ? window.clientWidth : window.innerWidth;
+				size=Math.min(height, width)*0.8;
+			}
+			if (!divisions) divisions=10;
+			_this.grid = new THREE.GridHelper(size,divisions);
+			_this.scene.add(_this.grid);
+		}
+	}
+
 	this.remove_model = function(model_id)
 	{
 		if (_this.models_ref[model_id]===undefined) return _this.model_error("remove_model - id not found: "+model_id);
@@ -308,8 +334,10 @@ function StlViewer(parent_element_obj, options)
 			
 		_this.zoom_done=true;
 		
-		var max_dim = Math.max(_this.maxx*2, _this.maxy*2, _this.maxz);
-			_this.camera.position.set(_this.camera.position.x,_this.camera.position.y,_this.zoom>=0?_this.zoom:(max_dim*1.2*Math.max(1,_this.camera.aspect/2))); //-1 = auto zoom
+		//var max_dim = Math.max(_this.maxx*2, _this.maxy*2, _this.maxz);
+		//_this.camera.position.set(_this.camera.position.x,_this.camera.position.y,_this.zoom>=0?_this.zoom:(max_dim*1.2*Math.max(1,_this.camera.aspect/2))); //-1 = auto zoom
+		var max_dim = Math.max(Math.abs(_this.maxx-_this.minx), Math.abs(_this.maxy-_this.miny), Math.abs(_this.maxz-_this.minz));
+		_this.camera.position.set(_this.camera.position.x,_this.camera.position.y,_this.zoom>=0?_this.zoom:max_dim*2); //-1 = auto zoom
 	}
 	
 	//position, up and target vectors (each 3 coors vector) described camera's position
@@ -389,7 +417,8 @@ function StlViewer(parent_element_obj, options)
 	this.set_camera=function (x,y,z)
 	{
 		if (y) _this.zoom=y;
-		_this.camera.position.set(!_this.is_empty(x)?x:_this.camera.position.x,!_this.is_empty(y)?y:_this.camera.position.y,_this.zoom>=0?_this.zoom:Math.max(_this.maxx*3, _this.maxy*3, _this.maxz*3.5));
+		//_this.camera.position.set(!_this.is_empty(x)?x:_this.camera.position.x,!_this.is_empty(y)?y:_this.camera.position.y,_this.zoom>=0?_this.zoom:Math.max(_this.maxx*3, _this.maxy*3, _this.maxz*3.5));
+		_this.camera.position.set(!_this.is_empty(x)?x:_this.camera.position.x,!_this.is_empty(y)?y:_this.camera.position.y,!_this.is_empty(z)?z:_this.camera.position.z);
 	}
 	
 	this.set_auto_zoom=function()
@@ -632,6 +661,8 @@ function StlViewer(parent_element_obj, options)
 			this.renderer.setClearColor(0x000000, 0);
 		else
 			this.renderer.setClearColor(bg_color, 1);
+
+		_this.bg_color=bg_color;
 	}
 
 	this.set_display = function(model_id, display)
@@ -779,7 +810,8 @@ function StlViewer(parent_element_obj, options)
 			
 			case "smooth":
 				material.wireframe=false;
-				material.shading=THREE.SmoothShading;
+				//material.shading=THREE.SmoothShading;
+				material.flatShading=false;
 				if (geo)
 				{
 					geo.mergeVertices();
@@ -789,7 +821,8 @@ function StlViewer(parent_element_obj, options)
 				
 			case "flat":
 				material.wireframe=false;
-				material.shading=THREE.FlatShading;
+				//material.shading=THREE.FlatShading;
+				material.flatShading=true;
 				if (geo)
 					geo.computeFlatVertexNormals();
 				break;
@@ -1031,6 +1064,7 @@ function StlViewer(parent_element_obj, options)
 		//get object info in json format
 		var pos=_this.camera.position;
 		var data={canvas_height:_this.canvas_height, bg_color:_this.bg_color, camera_state:_this.get_camera_state(), auto_rotate:_this.auto_rotate, mouse_zoom:_this.mouse_zoom, auto_resize:_this.auto_resize, center_models:_this.center_models};
+		if (_this.grid) data['grid']=1;
 		data['models']=[];
 		
 		Object.keys(_this.models_ref).forEach(function(key)
@@ -1102,6 +1136,7 @@ function StlViewer(parent_element_obj, options)
 		
 		link.download = download_name+'.vsj';
 		link.click();
+		URL.revokeObjectURL(link.href);
 	}
 
 	this.load_vsj = function(filename)
@@ -1310,6 +1345,7 @@ function StlViewer(parent_element_obj, options)
 				
 				link.download = download_name+'.vsb';
 				link.click();
+				URL.revokeObjectURL(link.href);
 			});
 		
 		return;
@@ -1439,6 +1475,7 @@ function StlViewer(parent_element_obj, options)
 		
 		link.download = download_name+'.stl';
 		link.click();
+		URL.revokeObjectURL(link.href);
 	}
 
 	this.get_model_mesh = function(model_id)
@@ -2027,7 +2064,7 @@ function StlViewer(parent_element_obj, options)
 		}
 	
 		_this.options=data;
-		
+
 		_this.set_options();
 		
 		if (_this.ready)
