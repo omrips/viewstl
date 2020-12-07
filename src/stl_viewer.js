@@ -97,6 +97,7 @@ function StlViewer(parent_element_obj, options)
 		if (_this.onmousedown_callback)
 		{
 			_this.parent_element.addEventListener('mousedown', _this.onmousedown);
+			_this.parent_element.addEventListener('dblclick', _this.onmousedown);
 			_this.parent_element.addEventListener('touchstart', _this.onmousedown);
 		}
 	}
@@ -710,32 +711,40 @@ function StlViewer(parent_element_obj, options)
 		event.stopPropagation();
 		event.preventDefault();
 		
+		//reset click_type: 1=left click, 3=right click, 11=double click, 20=touch
+		var click_type=event.which;
+
 		switch (event.type)
 		{
 			case 'touchstart':
+				click_type=20;
 				var touch = event.touches[0] || event.changedTouches[0];
 				_this.mouse.x = ( (touch.pageX-_this.parent_element.offsetLeft) / _this.parent_element.clientWidth ) * 2 - 1;
 				_this.mouse.y = - ( (touch.pageY-_this.parent_element.offsetTop) / _this.parent_element.clientHeight ) * 2 + 1;
 				break;
-				
+			
+			case 'dblclick': //double-click
+				click_type=11;
 			default: //click
 				_this.mouse.x = ( (event.clientX-_this.parent_element.offsetLeft) / _this.parent_element.clientWidth ) * 2 - 1;
 				_this.mouse.y = - ( (event.clientY-_this.parent_element.offsetTop) / _this.parent_element.clientHeight ) * 2 + 1;
 		}
-		
+
 		_this.raycaster.setFromCamera( _this.mouse, _this.camera );
 		var intersects = _this.raycaster.intersectObjects( _this.scene.children );
 		
+		
+
 		if (intersects.length>0)
 		{
 			if (intersects[0].object.model_id===undefined) return;
 			if (_this.onmousedown_callback)
 			{
-				_this.onmousedown_callback(intersects[0].object.model_id, event, intersects[0].distance);
+				_this.onmousedown_callback(intersects[0].object.model_id, event, intersects[0].distance, click_type);
 			}
 		}
 		else if (_this.send_no_model_click_event)
-			_this.onmousedown_callback(null, event, 0);
+			_this.onmousedown_callback(null, event, 0, click_type);
 	}
 
 	//will return if value is empty (null/undefined etc.) and not zero (which is valid)
@@ -2009,7 +2018,7 @@ function StlViewer(parent_element_obj, options)
 				scene.remove(scene.children[i]);
 		}
 		
-		_this.camera.position.set(_this.camerax,_this.cameray,_this.cameraz);
+		//_this.camera.position.set(_this.camerax,_this.cameray,_this.cameraz);
 		
 		_this.models=new Array();
 		_this.models_count=0;
