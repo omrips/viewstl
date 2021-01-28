@@ -74,44 +74,30 @@ self.addEventListener("message", function(e)
 function isNumeric(n)
 {
 	return !isNaN(parseFloat(n)) && isFinite(n);
-}
+}
+
 function send_error(s)
 {
 	postMessage({msg_type:MSG_ERROR, data:s});
 }
 
-function download_from_local(filename)
-{
-	var xhr = new XMLHttpRequest();
-	
-	if (get_progress)
-	{
-		xhr.onprogress =
-		function(e)
-		{
-			postMessage({msg_type:MSG_LOAD_IN_PROGRESS, id:model_id, loaded:e.loaded, total:e.total});
-		}
-	}	
-
-	xhr.onreadystatechange =
-	function(e)
-	{
-		if (xhr.readyState == 4)
-		{
-			//console.log('status: '+xhr.status);
-			if (xhr.status==200)
-			{
-				//console.log('done');
-				after_file_load(xhr.response);
-			}
-		}
-	}
-	
-	xhr.open("GET", filename, true);
-	xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
-	xhr.responseType = "arraybuffer";
-	
-	xhr.send(null);
+async function download_from_local(filename) {
+	const response = await fetch(filename)
+	const reader = response.body.getReader()
+	const total = Number(response.headers.get('content-length'))
+ 	const chunksAll = new Uint8Array(total)
+  	let position = 0
+  	while (true) {
+    		const { done, value } = await reader.read()
+    		if (done) break
+    		if (!value) continue
+    		chunksAll.set(value, position)
+    		position += value.length
+    		if (get_progress) {
+      			postMessage({ msg_type: MSG_LOAD_IN_PROGRESS, id: model_id, loaded: position, total: total })
+    		}
+  	}
+	after_file_load(chunksAll.buffer)
 }
 
 function after_file_load(s)
