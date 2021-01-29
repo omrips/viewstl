@@ -81,7 +81,50 @@ function send_error(s)
 	postMessage({msg_type:MSG_ERROR, data:s});
 }
 
-async function download_from_local(filename) {
+function download_from_local(filename)
+{
+	if (fetch) {
+		download_from_local_with_fetch(filename)
+	} else {
+		download_from_local_with_xhr(filename)
+	}
+}
+
+function download_from_local_with_xhr(filename)
+{
+	var xhr = new XMLHttpRequest();
+	
+	if (get_progress)
+	{
+		xhr.onprogress =
+		function(e)
+		{
+			postMessage({msg_type:MSG_LOAD_IN_PROGRESS, id:model_id, loaded:e.loaded, total:e.total});
+		}
+	}	
+
+	xhr.onreadystatechange =
+	function(e)
+	{
+		if (xhr.readyState == 4)
+		{
+			//console.log('status: '+xhr.status);
+			if (xhr.status==200)
+			{
+				//console.log('done');
+				after_file_load(xhr.response);
+			}
+		}
+	}
+	
+	xhr.open("GET", filename, true);
+	xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+	xhr.responseType = "arraybuffer";
+	
+	xhr.send(null);
+}
+
+async function download_from_local_with_fetch(filename) {
 	const response = await fetch(filename)
 	const reader = response.body.getReader()
 	const total = Number(response.headers.get('content-length'))
