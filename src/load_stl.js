@@ -74,13 +74,23 @@ self.addEventListener("message", function(e)
 function isNumeric(n)
 {
 	return !isNaN(parseFloat(n)) && isFinite(n);
-}
+}
+
 function send_error(s)
 {
 	postMessage({msg_type:MSG_ERROR, data:s});
 }
 
 function download_from_local(filename)
+{
+	if (fetch) {
+		download_from_local_with_fetch(filename)
+	} else {
+		download_from_local_with_xhr(filename)
+	}
+}
+
+function download_from_local_with_xhr(filename)
 {
 	var xhr = new XMLHttpRequest();
 	
@@ -112,6 +122,25 @@ function download_from_local(filename)
 	xhr.responseType = "arraybuffer";
 	
 	xhr.send(null);
+}
+
+async function download_from_local_with_fetch(filename) {
+	const response = await fetch(filename)
+	const reader = response.body.getReader()
+	const total = Number(response.headers.get('content-length'))
+ 	const chunksAll = new Uint8Array(total)
+  	let position = 0
+  	while (true) {
+    		const { done, value } = await reader.read()
+    		if (done) break
+    		if (!value) continue
+    		chunksAll.set(value, position)
+    		position += value.length
+    		if (get_progress) {
+      			postMessage({ msg_type: MSG_LOAD_IN_PROGRESS, id: model_id, loaded: position, total: total })
+    		}
+  	}
+	after_file_load(chunksAll.buffer)
 }
 
 function after_file_load(s)
