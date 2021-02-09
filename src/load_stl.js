@@ -1,4 +1,4 @@
-//1.10
+//1.12
 //load STL file info geometry and returns it
 
 importScripts("parser.min.js");
@@ -44,6 +44,7 @@ self.addEventListener("message", function(e)
 			
 			model_id=e.data.data.id?e.data.data.id:-1;
 			get_progress=e.data.get_progress?e.data.get_progress:false;
+
 			break;
 			
 		case MSG_LOAD:
@@ -83,14 +84,17 @@ function send_error(s)
 
 function download_from_local(filename)
 {
-	if (fetch) {
-		download_from_local_with_fetch(filename)
-	} else {
-		download_from_local_with_xhr(filename)
+	if (fetch)
+	{
+		download_from_local_fetch(filename);
+	}
+	else
+	{
+		download_from_local_xhr(filename);
 	}
 }
 
-function download_from_local_with_xhr(filename)
+function download_from_local_xhr(filename)
 {
 	var xhr = new XMLHttpRequest();
 	
@@ -118,27 +122,30 @@ function download_from_local_with_xhr(filename)
 	}
 	
 	xhr.open("GET", filename, true);
-	xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+	//xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
 	xhr.responseType = "arraybuffer";
 	
 	xhr.send(null);
 }
 
-async function download_from_local_with_fetch(filename) {
-	const response = await fetch(filename)
-	const reader = response.body.getReader()
-	const total = Number(response.headers.get('content-length'))
- 	const chunksAll = new Uint8Array(total)
+async function download_from_local_fetch(filename)
+{
+	const response = await fetch(filename);
+	const reader = response.body.getReader();
+	const total = Number(response.headers.get('content-length'));
+ 	const chunksAll = new Uint8Array(total);
   	let position = 0
-  	while (true) {
-    		const { done, value } = await reader.read()
-    		if (done) break
-    		if (!value) continue
-    		chunksAll.set(value, position)
-    		position += value.length
-    		if (get_progress) {
-      			postMessage({ msg_type: MSG_LOAD_IN_PROGRESS, id: model_id, loaded: position, total: total })
-    		}
+	while (true)
+	{
+		const { done, value } = await reader.read()
+    	if (done) break;
+    	if (!value) continue;
+    	chunksAll.set(value, position);
+    	position += value.length;
+		if (get_progress)
+		{
+    		postMessage({ msg_type: MSG_LOAD_IN_PROGRESS, id: model_id, loaded: position, total: total });
+    	}
   	}
 	after_file_load(chunksAll.buffer)
 }

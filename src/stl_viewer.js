@@ -1,5 +1,14 @@
-//1.11
+//1.12
 //**********************************************************
+//New in 1.12 => improve auto_zoom algorithm by Michal Jirku (https://wejn.org/2020/12/cracking-the-threejs-object-fitting-nut/)
+//New in 1.12 => "dispose" function
+//New in 1.12 => fixed memory leak on "clean" function (thanks to Anthony https://github.com/antho1404)
+//New in 1.12 => use 'fetch' instead for xhr when possible (thanks to Anthony https://github.com/antho1404)
+//New in 1.12 => added get_vsb_blob (returns vsb file as binary)
+//New in 1.12 => set viewstl to take all of the container (and not 5px margin)
+//New in 1.12 => fixed bug in json_without_nulls function
+//New in 1.12 => cal vol/area bug
+//New in 1.12 => remove edges where model is removed
 //New in 1.11 => set grid
 //New in 1.10 => revoke dataURLs
 //New in 1.10 => fix issue with rotation at 0 angle
@@ -46,6 +55,7 @@ function StlViewer(parent_element_obj, options)
 		if (!_this.options) return def;
 		
 		if (_this.options[opt_id]===false) return false;
+
 		return _this.options[opt_id]?_this.options[opt_id]:def;
 	}
 	
@@ -89,6 +99,8 @@ function StlViewer(parent_element_obj, options)
 	this.zip_load_count=-1; //Zip files waiting to be loaded to memory (used when loading VSB)
 	this.send_no_model_click_event=false; //will trigger click event even if no model was clicked (just parent element was clicked)
 	this.grid=null; //draw grid over scene
+
+	this.killsign=false; //use by 'dispose', stl_viewer instqance will be unusable after setting this to true
 	
 	this.set_on_model_mousedown = function (callback)
 	{
@@ -250,6 +262,7 @@ function StlViewer(parent_element_obj, options)
 		var blob_to_load=null;
 		if (_this.pre_loaded_ab_files) if (model.filename) if (_this.pre_loaded_ab_files[model.filename]) blob_to_load=_this.pre_loaded_ab_files[model.filename];
 		
+		//console.log ('blob to load', blob_to_load, _this.pre_loaded_ab_files, _this.pre_loaded_ab_files[model.filename]);
 		model_worker.postMessage({msg_type:_this.MSG2WORKER_DATA, data:model, load_from_blob_or_ab:blob_to_load, get_progress:(_this.loading_progress_callback!=null)});
 		model_worker.postMessage({msg_type:_this.MSG2WORKER_LOAD});
 	
@@ -307,6 +320,8 @@ function StlViewer(parent_element_obj, options)
 		var model=_this.models[_this.models_ref[model_id]];
 		if (!model) return;
 		
+		_this.set_or_update_geo_edges (model, false);
+
 		delete _this.models[_this.models_ref[model_id]];
 		delete _this.models_ref[model_id];
 		delete _this.loaded_models_arr[model_id];
@@ -335,11 +350,36 @@ function StlViewer(parent_element_obj, options)
 			
 		_this.zoom_done=true;
 		
-		//var max_dim = Math.max(_this.maxx*2, _this.maxy*2, _this.maxz);
-		//_this.camera.position.set(_this.camera.position.x,_this.camera.position.y,_this.zoom>=0?_this.zoom:(max_dim*1.2*Math.max(1,_this.camera.aspect/2))); //-1 = auto zoom
-		var max_dim = Math.max(Math.abs(_this.maxx-_this.minx), Math.abs(_this.maxy-_this.miny), Math.abs(_this.maxz-_this.minz));
-		_this.camera.position.set(_this.camera.position.x,_this.camera.position.y,_this.zoom>=0?_this.zoom:max_dim*2); //-1 = auto zoom
+		//var max_dim = Math.max(Math.abs(_this.maxx-_this.minx), Math.abs(_this.maxy-_this.miny), Math.abs(_this.maxz-_this.minz));
+		var cameraZ=_this.zoom;
+		if (_this.zoom<0) cameraZ=_this.calc_z_for_auto_zoom(); //-1 = auto zoom
+		_this.camera.position.set(_this.camera.position.x,_this.camera.position.y,cameraZ);
+
+		// set the far plane of the camera so that it easily encompasses the whole object
+		const minZ = _this.minz;
+		const cameraToFarEdge = ( minZ < 0 ) ? -minZ + cameraZ : cameraZ - minZ;
+
+		_this.camera.far = cameraToFarEdge * 3;
+		_this.camera.updateProjectionMatrix();		
+
 	}
+
+	this.calc_z_for_auto_zoom=function (offset)
+	{
+		offset = offset || 1.01;
+
+		const boundingBox = new THREE.Box3(new THREE.Vector3( _this.minx, _this.miny, _this.minz ), new THREE.Vector3( _this.maxx, _this.maxy, _this.maxz ));
+    	var size = new THREE.Vector3();
+    	boundingBox.getSize(size);
+
+		const fov = _this.camera.fov * ( Math.PI / 180 );
+		const fovh = 2*Math.atan(Math.tan(fov/2) * _this.camera.aspect);
+		let dx = size.z / 2 + Math.abs( size.x / 2 / Math.tan( fovh / 2 ) );
+		let dy = size.z / 2 + Math.abs( size.y / 2 / Math.tan( fov / 2 ) );
+		let cameraZ = Math.max(dx, dy);
+		cameraZ *= offset;
+		return cameraZ;
+	}	
 	
 	//position, up and target vectors (each 3 coors vector) described camera's position
 	this.get_camera_state=function()
@@ -1306,11 +1346,12 @@ function StlViewer(parent_element_obj, options)
 
 	this.json_without_nulls=function(arr)
 	{
-		return JSON.stringify(arr).split(",null").join("");
+		return JSON.stringify(arr).split(",null").join("").split("null,").join("");
 	}
 
-	this.download_vsb = function(filename)
+	this.get_vsb_blob = function()
 	{
+		//makes vsb and returns it as a blob
 		var zip=null;
 		try
 		{
@@ -1332,32 +1373,33 @@ function StlViewer(parent_element_obj, options)
 			zip.file(curr_filename, vsb.files[key].bin);
 		});
 		
-		zip.generateAsync({type:"blob"})
-			.then(function(content)
-			{
-				var blob = new Blob([content], {type: "application/zip"});
-				
-				var link = document.createElement("a");
-				link.href = window.URL.createObjectURL(blob);
-				var download_name=filename?filename:"1";
-				var p=download_name.toLowerCase().indexOf('.vsb');
-				if (p>=0) download_name=download_name.substring( 0, p );
-				if (download_name.length<1) download_name='1';
-				
-				if (window.navigator.msSaveOrOpenBlob)
-				{
-					//only for IE
-					window.navigator.msSaveBlob(blob, download_name+'.vsb');
-					return;
-				}
+		return zip.generateAsync({type:"blob"});
+	} 
 
+	this.download_vsb = function(filename)
+	{
+		_this.get_vsb_blob(filename).then(function(content)
+		{
+			var blob = new Blob([content], {type: "application/zip"});
 				
-				link.download = download_name+'.vsb';
-				link.click();
-				URL.revokeObjectURL(link.href);
-			});
-		
-		return;
+			var link = document.createElement("a");
+			link.href = window.URL.createObjectURL(blob);
+			var download_name=filename?filename:"1";
+			var p=download_name.toLowerCase().indexOf('.vsb');
+			if (p>=0) download_name=download_name.substring( 0, p );
+			if (download_name.length<1) download_name='1';
+				
+			if (window.navigator.msSaveOrOpenBlob)
+			{
+				//only for IE
+				window.navigator.msSaveBlob(blob, download_name+'.vsb');
+				return;
+			}
+
+			link.download = download_name+'.vsb';
+			link.click();
+			URL.revokeObjectURL(link.href);
+		});
 	}
 
 	this.load_vsb = function(filename)
@@ -1538,28 +1580,32 @@ function StlViewer(parent_element_obj, options)
 
 	this.do_resize = function()
 	{
+		if (!_this.parent_element) return;
 		var r=_this.parent_element.getBoundingClientRect();
+		//var r=_this.parent_element.children[0].getBoundingClientRect();
 		var rsize_width=r.width;
 		var rsize_height=r.height;
 					
 		_this.camera.aspect = rsize_width / rsize_height;
 		_this.camera.updateProjectionMatrix();
-		_this.renderer.setSize(rsize_width-5, rsize_height-5);
+		//_this.renderer.setSize(rsize_width-5, rsize_height-5);
+		_this.renderer.setSize(rsize_width, rsize_height);
 	}
 
 	this.animation=new Array();	
 	this.animate = function()
 	{
+		if (_this.killsign) return;
 		Object.keys(_this.animation).forEach(function(key)
 		{
 			if (!(_this.models_ref[key]===undefined))
 				_this.do_model_animation(_this.models[_this.models_ref[key]]);
 		});
 	
- 		requestAnimationFrame(_this.animate);
- 		_this.renderer.render(_this.scene, _this.camera);
- 		
- 		//console.log(_this.camera.position);
+		requestAnimationFrame(_this.animate);
+		 
+		if (_this.renderer)
+			_this.renderer.render(_this.scene, _this.camera);
  		
  		if (_this.controls)
 			_this.controls.update();
@@ -2009,25 +2055,41 @@ function StlViewer(parent_element_obj, options)
 	
 	this.clean = function()
 	{
+		_this.models=null;_this.models=[];
+		_this.models_count=0;
+		_this.models_ref=null;_this.models_ref=[];
+		_this.max_model_id=0;
+		_this.load_status=null;_this.load_status=[];
+		_this.load_session=0;
+		_this.loaded_models_arr=null;_this.loaded_models_arr=[];
+		_this.animation=null;_this.animation=[];
+		_this.models_to_add=null;_this.models_to_add=[];
+		_this.options.models=null;
+
+
 		if (!_this.scene) return;
 		var scene=_this.scene;
 		i=scene.children.length;
 		while (i--)
 		{ 
 			if (scene.children[i].type==='Mesh')
+			{
+				scene.children[i].geometry.dispose();
+				scene.children[i].material.dispose();				
 				scene.remove(scene.children[i]);
+			}
 		}
 		
-		//_this.camera.position.set(_this.camerax,_this.cameray,_this.cameraz);
+		//remove edges for each model
+		Object.keys(_this.models_ref).forEach(function(key)
+		{
+			_this.set_or_update_geo_edges (_this.models[_this.models_ref[key]], false);
+		});
 		
-		_this.models=new Array();
-		_this.models_count=0;
-		_this.models_ref=new Array();
-		_this.max_model_id=0;
-		_this.load_status=new Array();
-		_this.load_session=0;
-		_this.loaded_models_arr=new Array();
-		_this.animation=new Array();
+
+		//_this.camera.position.set(_this.camerax,_this.cameray,_this.cameraz);
+
+		_this.renderer.renderLists.dispose();
 	}
 	
 	this.reset_parent_element=function(parent_element_obj)
@@ -2080,6 +2142,56 @@ function StlViewer(parent_element_obj, options)
 			_this.init();
 	}
 	
+	this.dispose = function()
+	{
+		//clean object's references (and let brower's GC do it work)
+		_this.clean();
+
+		_this.killsign=true; //not to render anymore
+
+		if (_this.renderer) //one last render (to clean it all)
+			_this.renderer.render(_this.scene, _this.camera);
+ 		
+ 		if (_this.controls)
+			_this.controls.update();
+
+		_this.animate=null;
+		_this.animation=null;
+		_this.error=null;
+		_this.options=null;
+		_this.parent_element=null;	
+		_this.models_to_add=null;
+		_this.models=null;
+		_this.models_ref=null;
+		_this.model_loaded_callback=null;
+		_this.all_loaded_callback=null;
+		_this.load_error_callback=null;
+		_this.loading_progress_callback=null;
+		_this.load_status=null;
+		_this.loaded_models_arr=null;
+		_this.onmousedown_callback=null;
+		_this.camera_state=null;
+		_this.ready_callback=null;
+		_this.on_model_drop=null;
+		_this.pre_loaded_ab_files=null;
+		_this.pre_loaded_vsj=null;
+		_this.grid=null;
+		_this.WORLD_X_VECTOR=null;
+		_this.WORLD_Y_VECTOR=null;
+		_this.WORLD_Z_VECTOR=null;
+		_this.edges_material=null;
+		_this.raycaster=null;
+		_this.mouse =null;
+		_this.renderer = null;
+		_this.scene = null;
+		_this.camera = null;
+		_this.ambientLight = null;
+		_this.directionalLight = null;
+		_this.pointLight = null;
+		_this.controls = null;
+	}
+
+
 	//constructor
 	_this.set_options();
 	
