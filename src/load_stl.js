@@ -84,14 +84,14 @@ function send_error(s)
 
 function download_from_local(filename)
 {
-	if (fetch)
-	{
-		download_from_local_fetch(filename);
-	}
-	else
-	{
+	//if ((fetch)&&(async_supported()))
+	//{
+	//	download_from_local_fetch(filename);
+	//}
+	//else
+	//{
 		download_from_local_xhr(filename);
-	}
+	//}
 }
 
 function download_from_local_xhr(filename)
@@ -128,6 +128,7 @@ function download_from_local_xhr(filename)
 	xhr.send(null);
 }
 
+/*
 async function download_from_local_fetch(filename)
 {
 	const response = await fetch(filename);
@@ -149,6 +150,7 @@ async function download_from_local_fetch(filename)
   	}
 	after_file_load(chunksAll.buffer)
 }
+*/
 
 function after_file_load(s)
 {
