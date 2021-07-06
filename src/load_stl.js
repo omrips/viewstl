@@ -1,7 +1,8 @@
-//1.12
+//1.13
 //load STL file info geometry and returns it
 
-importScripts("parser.min.js");
+//importScripts("parser.min.js");
+importScripts("parser.js");
 
 MSG_DATA=0;
 MSG_LOAD=1;
@@ -17,6 +18,7 @@ var y=0;
 var z=0;
 var model_id=-1;
 var get_progress=false;
+var jszip_path='jszip.min.js';
 
 self.addEventListener("message", function(e)
 {
@@ -26,6 +28,9 @@ self.addEventListener("message", function(e)
 			if (!e.data.data) {send_error("no data");break;}
 			if ((!e.data.data.filename)&&(!e.data.data.local_file)) {send_error("no file");break;}
 			
+			if (e.data.jszip_path)
+				jszip_path=e.data.jszip_path;
+
 			if (e.data.data.local_file)
 			{
 				filename=e.data.data.local_file.name?e.data.data.local_file.name:e.data.data.filename; //filename property is usefull for blob files, 10x Fraser
@@ -161,16 +166,29 @@ function after_file_load(s)
 		send_error("no data");
 		return;
 	}
-	
+
 	try
 	{
-		vf_data=parse_3d_file(filename, s);
+		vf_data=parse_3d_file(filename, s, after_file_parse, jszip_path);
 	}
 	catch(err)
 	{
-		vf_data="Error parsing the file";
+		send_error("Error parsing the file");
 	}
-				
+	
+	/*
+	if (typeof vf_data === 'string')
+	{
+		send_error(vf_data);
+		return;
+	}
+	
+	postMessage({msg_type:MSG_STL_LOADED, vertices:vf_data.vertices, faces:vf_data.faces, colors:vf_data.colors});
+	*/
+}
+
+function after_file_parse(vf_data)
+{
 	if (typeof vf_data === 'string')
 	{
 		send_error(vf_data);

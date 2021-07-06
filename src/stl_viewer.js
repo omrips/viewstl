@@ -1,9 +1,12 @@
-//1.12
+//1.13
 //**********************************************************
+//New in 1.13 => add default color for faces (relevant for colored model)
+//New in 1.13 => 3mf format support
+//New in 1.13 => enlarge camera.far value
+//New in 1.13 => fixed bug in units changing (do not change scale properties)
 //New in 1.12 => improve auto_zoom algorithm by Michal Jirku (https://wejn.org/2020/12/cracking-the-threejs-object-fitting-nut/)
 //New in 1.12 => "dispose" function
 //New in 1.12 => fixed memory leak on "clean" function (thanks to Anthony https://github.com/antho1404)
-//New in 1.12 => use 'fetch' instead for xhr when possible (thanks to Anthony https://github.com/antho1404)
 //New in 1.12 => added get_vsb_blob (returns vsb file as binary)
 //New in 1.12 => set viewstl to take all of the container (and not 5px margin)
 //New in 1.12 => fixed bug in json_without_nulls function
@@ -89,6 +92,8 @@ function StlViewer(parent_element_obj, options)
 	this.load_three_files=_this.get_opt("load_three_files", stl_viewer_script_path);
 	this.ready=(typeof THREE != 'undefined');
 	this.ready_callback=null;
+	this.jszip_path=null;
+	this.jszip_utils_path=null;
 	this.auto_resize=true;
 	this.on_model_drop=null;
 	this.center_models=true;
@@ -101,6 +106,8 @@ function StlViewer(parent_element_obj, options)
 	this.grid=null; //draw grid over scene
 
 	this.killsign=false; //use by 'dispose', stl_viewer instqance will be unusable after setting this to true
+
+	this.default_face_color="#909090"; //in case of a colored model, RGB in hex
 	
 	this.set_on_model_mousedown = function (callback)
 	{
@@ -147,6 +154,8 @@ function StlViewer(parent_element_obj, options)
 		_this.auto_rotate=_this.get_opt("auto_rotate",_this.auto_rotate);
 		_this.mouse_zoom=_this.get_opt("mouse_zoom",_this.mouse_zoom);
 		_this.ready_callback=_this.get_opt("ready_callback",null);
+		_this.jszip_path=_this.get_opt("jszip_path",null);
+		_this.jszip_utils_path=_this.get_opt("jszip_utils_path",null);
 		_this.auto_resize=_this.get_opt("auto_resize",_this.auto_resize);
 		_this.on_model_drop=_this.get_opt("on_model_drop",_this.on_model_drop);
 		_this.center_models=_this.get_opt("center_models",_this.center_models);
@@ -215,7 +224,7 @@ function StlViewer(parent_element_obj, options)
 			{
 				case _this.MSGFROMWORKER_STL_LOADED:
 					model.colors=e.data.colors;
-					var geo=_this.vf_to_geo(e.data.vertices, e.data.faces, e.data.colors?e.data.colors:false);
+					var geo=_this.vf_to_geo(e.data.vertices, e.data.faces, e.data.colors?e.data.colors:false, model.color);
 					if (geo)
 					{
 						//if (!geo.boundingBox) geo.computeBoundingBox();
@@ -263,7 +272,7 @@ function StlViewer(parent_element_obj, options)
 		if (_this.pre_loaded_ab_files) if (model.filename) if (_this.pre_loaded_ab_files[model.filename]) blob_to_load=_this.pre_loaded_ab_files[model.filename];
 		
 		//console.log ('blob to load', blob_to_load, _this.pre_loaded_ab_files, _this.pre_loaded_ab_files[model.filename]);
-		model_worker.postMessage({msg_type:_this.MSG2WORKER_DATA, data:model, load_from_blob_or_ab:blob_to_load, get_progress:(_this.loading_progress_callback!=null)});
+		model_worker.postMessage({msg_type:_this.MSG2WORKER_DATA, data:model, load_from_blob_or_ab:blob_to_load, get_progress:(_this.loading_progress_callback!=null), jszip_path:_this.jszip_path});
 		model_worker.postMessage({msg_type:_this.MSG2WORKER_LOAD});
 	
 	}
@@ -359,8 +368,9 @@ function StlViewer(parent_element_obj, options)
 		const minZ = _this.minz;
 		const cameraToFarEdge = ( minZ < 0 ) ? -minZ + cameraZ : cameraZ - minZ;
 
-		_this.camera.far = cameraToFarEdge * 3;
+		_this.camera.far = Math.max(cameraToFarEdge * 3000, _this.camera.far);
 		_this.camera.updateProjectionMatrix();		
+		//console.log(_this.camera.far);
 
 	}
 
@@ -580,7 +590,7 @@ function StlViewer(parent_element_obj, options)
 			_this.animation[model.id]=1;
 	}
 	
-	this.set_scale = function(model_id, scalex, scaley, scalez)
+	this.set_scale = function(model_id, scalex, scaley, scalez, keep_prev_scale)
 	{
 		if (_this.models_ref[model_id]===undefined) return _this.model_error("set_scale - id not found: "+model_id);
 	
@@ -604,6 +614,13 @@ function StlViewer(parent_element_obj, options)
 			_this.set_or_update_geo_edges (model, true, true);
 			
 		//console.log(model.scalex+"/"+model.scaley+"/"+model.scalez);
+
+		if (keep_prev_scale) //keep the previous scale (just change the geometry)
+		{
+			model.scalex=prev_scalex;
+			model.scaley=prev_scaley;
+			model.scalez=prev_scalez;
+		}		
 	}
 	
 	this.scale_geo = function(model,scalex,scaley,scalez)
@@ -823,7 +840,8 @@ function StlViewer(parent_element_obj, options)
 			_this.set_scale(model.id,
 			model.scalex*scale_factor,
 			model.scaley*scale_factor,
-			model.scalez*scale_factor
+			model.scalez*scale_factor,
+			true //keep the current scale, just change the geometry
 			);
 		}
 	}
@@ -974,7 +992,7 @@ function StlViewer(parent_element_obj, options)
 
 				case 'vsb':
 					return _this.load_vsb(new_model.local_file?new_model.local_file:model_filename);
-							
+
 				//default: assumed as a regular model (STL etc.) - do nothing, continue below
 			}
 		}
@@ -1436,6 +1454,7 @@ function StlViewer(parent_element_obj, options)
 						
 		reader.onload = function(e)
 		{
+			//return after_read_func(e.target.result, filename);
 			return after_read_func(e.target.result);
 		};
 		
@@ -1489,14 +1508,6 @@ function StlViewer(parent_element_obj, options)
 				}
             });
 		});
-	}
-
-	//load arraybuffer to memory (for later loading)
-	this.load_bin_to_ab_file=function(url, ab_data)
-	{
-		if (!_this.pre_loaded_ab_files) _this.pre_loaded_ab_files=[];
-		_this.pre_loaded_ab_files[url]=ab_data;
-		_this.add_model({id:-1, filename:url});
 	}
 
 	this.download_model = function(model_id, filename)
@@ -1836,7 +1847,7 @@ function StlViewer(parent_element_obj, options)
 			_this.scene = new THREE.Scene();
 			_this.is_webgl=webgl_Detector.webgl;
 			_this.renderer = _this.is_webgl ? new THREE.WebGLRenderer({preserveDrawingBuffer:true, alpha:true}): new THREE.CanvasRenderer({alpha:true});
-			_this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 10000);
+			_this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100000);
 			_this.parent_element.appendChild(_this.renderer.domElement);
 			_this.scene.add(_this.camera);
 			
@@ -1908,7 +1919,7 @@ function StlViewer(parent_element_obj, options)
 			
 	}
 	
-	this.vf_to_geo = function (vertices, faces, colors)
+	this.vf_to_geo = function (vertices, faces, colors, default_face_color)
 	{
 		if (!vertices) return null;
 		if (!faces) return null;
@@ -1932,7 +1943,13 @@ function StlViewer(parent_element_obj, options)
 			for (i=0;i<len;i++)
 			{
 				var face=new THREE.Face3(faces[i][0],faces[i][1],faces[i][2]);
-				face.color.setRGB ( faces[i][3], faces[i][4], faces[i][5] );
+				if (typeof faces[i][3] === "undefined")
+				{
+					if (!default_face_color) default_face_color=_this.default_face_color; //if user didn't define model color, it will take the default value. since model is colored (if we're here) - we have to give each face a color, or it will appear black
+					face.color.setRGB ( parseInt(_this.default_face_color.substr(1,2),16)/255, parseInt(_this.default_face_color.substr(3,2),16)/255, parseInt(_this.default_face_color.substr(5,2),16)/255);
+				}
+				else
+					face.color.setRGB ( faces[i][3], faces[i][4], faces[i][5] );
 				geo_faces.push(face);
 			}
 		}
@@ -2040,7 +2057,7 @@ function StlViewer(parent_element_obj, options)
 					case 'vsb':
 						_this.load_vsb(files[i]);
 						break;
-						
+
 					default:
 						//assumed as a regular model (STL etc.)
 						dropped_models.push({id:-1, local_file:files[i]});
@@ -2116,9 +2133,12 @@ function StlViewer(parent_element_obj, options)
 	{
 		if (typeof _this.load_three_files != "string") _this.load_three_files="";
 		_this.scripts_loader=new ScriptsLoader();
-		//_this.scripts_loader.load_scripts(new Array(path+"three.min.js", path+"webgl_detector.js", path+"Projector.js", path+"CanvasRenderer.js", path+"OrbitControls.js"), _this.external_files_loaded);
-		//_this.scripts_loader.load_scripts(new Array(path+"three.min.js", path+"webgl_detector.js", path+"Projector.js", path+"CanvasRenderer.js", path+"TrackballControls.js"), _this.external_files_loaded);
-		_this.scripts_loader.load_scripts(new Array(path+"three.min.js", path+"webgl_detector.js", path+"Projector.js", path+"CanvasRenderer.js", path+(_this.controls_type==0?"OrbitControls.js":"TrackballControls.js")), _this.external_files_loaded);
+		var scripts_to_load=[path+"three.min.js", path+"webgl_detector.js", path+"Projector.js", path+"CanvasRenderer.js", path+(_this.controls_type==0?"OrbitControls.js":"TrackballControls.js")];
+
+		if (_this.jszip_path) scripts_to_load.push(_this.jszip_path); //need it to handle vsb and 3mf formats
+		if (_this.jszip_utils_path) scripts_to_load.push(_this.jszip_utils_path); //need it to handle vsb format
+
+		_this.scripts_loader.load_scripts(scripts_to_load, _this.external_files_loaded);
 	}
 	
 	this.init_by_json = function(json_str)
