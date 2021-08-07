@@ -22,4 +22,20 @@ Create a new instance of Stl Viewer (simplest initiation - read and view STL fil
 var stl_viewer=new StlViewer(document.getElementById("stl_cont"), { models: [ {id:0, filename:"mystl.stl"} ] });
 ```
 
+Dependency on JSZip library:
+============================
+When dealing with 3mf/vsb files you must use JSZip library - https://stuk.github.io/jszip/
+ - this library is not included here, you must upload it to your server and supply jszip_path and jszip_utils_path parameters:
+``` 
+var stl_viewer=new StlViewer
+(
+  document.getElementById("stl_cont"),
+  {
+      ....
+      jszip_path:"/<path_to_jszip>/jszip.min.js",
+      jszip_utils_path:"/<path_to_jszip>/jszip-utils.min.js"
+  }
+);
+```
+
 more at https://www.viewstl.com/plugin/
