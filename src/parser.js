@@ -1,4 +1,5 @@
-//1.13
+//1.13.1
+//1.13.1 support for MagicLab colored-STL method
 
 function parse_3d_file(filename, s, callback, jszip_path)
 {
@@ -129,18 +130,25 @@ function parse_stl_bin(s)
 	var vertexIndex;
 	var f1,f2,f3;
 	var v1,v2,v3;
+	var color_bit=0;
+	var color_method_mt=false; //face colors are encoded Materialise Magics method (othereise it can be Meshlab method)
 
 	if (!s) return null;
 
 	//see if this is colored STL
 	var cpos=arrayBufferToString(s.slice(0,80)).toLowerCase().indexOf("color");
+	//cpos=true;
 	
 	var fdata = new DataView(s, 0);
-	var only_default_color=true;
+	var have_face_colors=false;
+	var def_red_color=-1;
+	var def_green_color=-1;
+	var def_blue_color=-1;
 	
 	if (cpos>-1)
 	{
-		//there is a color, get the default color
+		//there is a color (Materialise Magics format), get the default color
+		color_method_mt=true;
 		def_red_color=(fdata.getUint8 (cpos+6,true)) / 31;
 		def_green_color=(fdata.getUint8 (cpos+7,true)) / 31;
 		def_blue_color=(fdata.getUint8 (cpos+8,true)) / 31;
@@ -212,49 +220,59 @@ function parse_stl_bin(s)
 			}
 			v3=vertexIndex;		
 
-			if (cpos>-1)
+			//color data (if any)
+			pos+=12;
+			face_color=fdata.getUint16(pos,true);
+			//color_bit=color_method_mt?1:(face_color & 1); //0000000000000001 => 1=have face color, 0=nope
+			color_bit=color_method_mt?1:((face_color & 32768)>>15); //1000000000000000 => 1=have face color, 0=nope
+			//console.log('color_bit', color_bit, face_color);
+
+			if (color_bit)
 			{
-				pos+=12;
-				
-				//get 2 bytes of color (if any)
-				face_color=fdata.getUint16(pos,true);
-				
-				if ((face_color==32768)||(face_color==65535))
+				if (color_method_mt)
 				{
-					//default color
-					color_red=def_red_color;
-					color_green=def_green_color;
-					color_blue=def_blue_color;
+					if ((face_color==32768)||(face_color==65535))
+					{
+						//default color
+						color_red=def_red_color;
+						color_green=def_green_color;
+						color_blue=def_blue_color;
+					}
+					else
+					{
+						have_face_colors=true;
+						color_red=((face_color & 31)/31);		//0000000000011111
+						color_green=(((face_color & 992)>>5)/31);  //0000001111100000
+						color_blue=(((face_color & 31744)>>10)/31);	//0111110000000000
+						
+						//the rgb are saved in values from 0 to 31 ... for us, we want it to be 0 to 1 - hence the 31)
+					}
 				}
 				else
 				{
-					only_default_color=false;
-					color_red=((face_color & 31)/31);		//0000000000011111
+					//meshlab color format
+					have_face_colors=true;
+					color_blue=((face_color & 31)/31);		//0000000000011111
 					color_green=(((face_color & 992)>>5)/31);  //0000001111100000
-					color_blue=(((face_color & 31744)>>10)/31);	//0111110000000000
-					
-					//the rgb are saved in values from 0 to 31 ... for us, we want it to be 0 to 1 - hence the 31)
+					color_red=(((face_color & 31744)>>10)/31);	//0111110000000000
 				}
-				
-				//faces.push(new THREE.Face3(v1,v2,v3,1,new THREE.Color("rgb("+color_red+","+color_green+","+color_blue+")")));
-				faces.push(new Array(v1,v2,v3,color_red, color_green,color_blue ));
-				
-				pos+=2;
+
+				faces.push(new Array(v1,v2,v3, color_red, color_green, color_blue));
 			}
 			else
 			{
-				//no color
+				//no color for face
 				//faces.push(new THREE.Face3(v1,v2,v3));
 				faces.push(new Array(v1,v2,v3));
-				pos+=14;
+				
 			}
+			pos+=2;		
+
 		}
 
 		vert_hash=null;
 	
-		//console.log("CPOS: "+cpos+" only default: "+only_default_color);
-	
-		return ({vertices:vertices, faces:faces, colors:((cpos>-1)&&(!only_default_color))});
+		return ({vertices:vertices, faces:faces, colors:have_face_colors});
 	}
 	catch(err)
 	{
