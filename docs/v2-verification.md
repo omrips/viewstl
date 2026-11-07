@@ -3,6 +3,26 @@
 This file records dated checks. Older sections describe the alpha at the time
 of each check; release-candidate results are recorded separately below.
 
+## npm names and installation — 2026-11-07
+
+Published `viewstl@2.0.0-rc.5` and `@omrips/viewstl@2.0.0-rc.5` with `latest`
+pointing to rc.5. The existing scoped `next` tag was also advanced to rc.5.
+Both READMEs document `npm install viewstl` and retain the scoped alternative.
+All existing scoped versions remain available.
+
+All 136 unit tests, strict browser/Node type checks and 37 legacy integrity
+checks pass again. Both packed distributions pass Node ESM/CommonJS type checks
+and runtime checks for browser exports, worker/CAD assets and STL/OBJ/3MF/STEP/IGES
+analysis. Fresh public-registry installs without a version suffix pass those
+runtime checks for both package names. Public tarball bytes and SHA-512 integrity
+match the tested local archives; each package contains 40 files.
+
+All 31 files under `build/` match the previously tested GitHub rc.5 distribution
+byte for byte. No renderer changes were made and browser/device tests were not
+rerun for this packaging update. The GitHub browser evidence below still applies
+to those exact runtime bytes. Evidence: local `test-results/npm-stage.json` and
+its referenced staging directory. See [maintainer workflow](npm-releases.md).
+
 ## GitHub root-layout release 2.0.0-rc.5 — 2026-11-07
 
 The release worktree places the v2 sources/distribution in `src/` and `build/`.

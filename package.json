@@ -1,5 +1,5 @@
 {
-  "name": "@omrips/viewstl",
+  "name": "viewstl",
   "version": "2.0.0-rc.5",
   "description": "Local-first STL, OBJ, 3MF, STEP and IGES viewer with native WebGL2 and transferable worker geometry",
   "type": "module",
@@ -18,7 +18,7 @@
   ],
   "publishConfig": {
     "access": "public",
-    "tag": "next",
+    "tag": "latest",
     "registry": "https://registry.npmjs.org/"
   },
   "repository": {
@@ -73,6 +73,7 @@
     "check:types": "tsc --noEmit --strict --module NodeNext --moduleResolution NodeNext --target ES2022 --lib ES2022,DOM tests/v2/types.ts",
     "check:node-types": "tsc --noEmit --strict --module NodeNext --moduleResolution NodeNext --target ES2022 --lib ES2022 --types node tests/v2/node-types.mts tests/v2/node-types.cts",
     "prepack": "node scripts/build-v2.mjs && node scripts/check-legacy.mjs",
+    "stage:npm": "node scripts/stage-npm.mjs",
     "start": "node scripts/serve-v2.mjs"
   },
   "devDependencies": {

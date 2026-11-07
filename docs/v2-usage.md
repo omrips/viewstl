@@ -1,6 +1,6 @@
 # ViewSTL 2 — native WebGL2 plugin
 
-Version: `2.0.0-rc.5` (ViewSTL v2.00 release candidate, GitHub distribution).
+Version: `2.0.0-rc.5` (ViewSTL v2.00 release candidate, GitHub and npm).
 On `main`, the new plugin is in `src/` and `build/`; the legacy tree is in
 `legacy/v1/`. The unchanged `master` branch retains original legacy paths.
 The v2 website is available at https://preview.viewstl.com/.
@@ -58,16 +58,13 @@ The package contains ESM, CommonJS and TypeScript entry points. Importing
 the package is safe during server-side rendering; constructing a viewer
 requires a browser DOM and WebGL2.
 
-The package name is `@omrips/viewstl`. Download the package tarball from the
-[GitHub release](https://github.com/omrips/viewstl/releases/tag/v2.0.0-rc.5), then run
-`npm install ./omrips-viewstl-2.0.0-rc.5.tgz`. This installs the same release
-under `node_modules/@omrips/viewstl`.
+Install with `npm install viewstl`. No version suffix is required: the `latest`
+tag selects the current release candidate. The established `@omrips/viewstl`
+package is also updated with the same plugin; `npm install @omrips/viewstl`
+works without a version suffix. Use either package name consistently in imports
+and asset-copy paths; there is no need to install both.
 
-The npm registry's existing `2.0.0-rc.4` package is unchanged and uses the older
-`build/v2/` layout. These instructions describe the new GitHub release; do not
-assume an unpinned npm dist-tag selects it.
-
-With a bundler, copy the complete `node_modules/@omrips/viewstl/build/`
+With a bundler, copy the complete `node_modules/viewstl/build/`
 directory to your app's public assets (for example `public/viewstl-v2/`), keeping
 the worker, `chunks/`, `cad/` and notices together. Set `worker_url` to its served
 URL, or provide your bundler's worker factory.
@@ -75,7 +72,7 @@ Do not assume a bundler copies a module worker's dynamic chunks merely
 because it sees a URL string.
 
 ```js
-import StlViewer from '@omrips/viewstl';
+import StlViewer from 'viewstl';
 
 const viewer = new StlViewer(container, {
   worker_url: '/viewstl-v2/viewstl.worker.js'
@@ -85,7 +82,7 @@ const viewer = new StlViewer(container, {
 For Vite, the optional factory form is:
 
 ```js
-import ViewerWorker from '@omrips/viewstl/worker?worker';
+import ViewerWorker from 'viewstl/worker?worker';
 const viewer = new StlViewer(container, {
   worker_factory: () => new ViewerWorker()
 });
@@ -101,17 +98,17 @@ The CommonJS entry point also requires
 
 ## Node.js model analysis
 
-Install the GitHub package tarball as above. Node.js 20+ resolves the analysis
+Run `npm install viewstl`. Node.js 20+ resolves the analysis
 worker and optional CAD WASM directly inside the package; there is no asset-copy
 step for server use.
 
 ```js
-import { analyzeFile } from '@omrips/viewstl/node';
+import { analyzeFile } from 'viewstl/node';
 const report = await analyzeFile('part.stl', { units: 'mm' });
 console.log(report.dimensions_mm, report.surface_area_mm2, report.volume_mm3);
 ```
 
-CommonJS is supported with `const { analyzeFile } = require('@omrips/viewstl/node')`.
+CommonJS is supported with `const { analyzeFile } = require('viewstl/node')`.
 The `/node` entry point is separate from the browser viewer and has no DOM,
 WebGL or Three.js dependency. It supports STL, OBJ, 3MF, STEP/STP and IGES/IGS.
 STEP/IGES measurements describe the tessellated mesh, not exact CAD surfaces.
@@ -124,7 +121,7 @@ object. `analyzeBuffer(data, options)` accepts a Node Buffer, Uint8Array or
 ArrayBuffer, and requires `filename` or `format` to identify the format:
 
 ```js
-import { analyzeBuffer } from '@omrips/viewstl/node';
+import { analyzeBuffer } from 'viewstl/node';
 const report = await analyzeBuffer(uploadBuffer, { filename: 'part.stl', units: 'mm' });
 ```
 
@@ -156,7 +153,7 @@ The convenience functions share an analyzer with two active workers, up to
 Create an independent analyzer when the host needs different concurrency:
 
 ```js
-import { createAnalyzer } from '@omrips/viewstl/node';
+import { createAnalyzer } from 'viewstl/node';
 const analyzer = createAnalyzer({ concurrency: 1, max_queue: 4 });
 try {
   const reports = await Promise.all(paths.map(path => analyzer.analyzeFile(path, {
@@ -311,8 +308,8 @@ so a 3MF triangle's per-vertex gradient cannot survive STL/VSB export exactly.
 
 ## Model animation
 
-Animation is included in this `2.0.0-rc.5` GitHub release. It is not in the existing
-`2.0.0-rc.4` npm package. Playback remains inside the native WebGL2 plugin.
+Animation is included in `2.0.0-rc.5` on GitHub and in both npm packages.
+Playback remains inside the native WebGL2 plugin.
 
 After a model has loaded, one call starts continuous rotation:
 

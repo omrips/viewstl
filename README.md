@@ -20,20 +20,18 @@ Replace `mystl.stl` with your model and serve the page over HTTP(S). Keep the wo
 
 ## npm / Node.js:
 
-For this GitHub release, download the [package tarball](https://github.com/omrips/viewstl/releases/download/v2.0.0-rc.5/omrips-viewstl-2.0.0-rc.5.tgz), then:
-
 ```sh
-npm install ./omrips-viewstl-2.0.0-rc.5.tgz
+npm install viewstl
 ```
 
-Browser apps can import `StlViewer` from `@omrips/viewstl`; see [worker setup](docs/v2-usage.md#es-modules-and-npm). Server-only analysis requires Node.js 20+:
+Browser apps can import `StlViewer` from `viewstl`; see [worker setup](https://github.com/omrips/viewstl/blob/main/docs/v2-usage.md#es-modules-and-npm). Server-only analysis requires Node.js 20+:
 
 ```js
-import { analyzeFile } from '@omrips/viewstl/node';
+import { analyzeFile } from 'viewstl/node';
 console.log(await analyzeFile('part.stl', { units: 'mm' }));
 ```
 
-The npm registry's existing `2.0.0-rc.4` package remains separate; this release is distributed on GitHub.
+No version suffix is needed. `npm install @omrips/viewstl` also installs the current release; existing scoped imports remain supported. Both names contain the same plugin, including animation and VSB/VSJ scene persistence.
 
 More at [viewstl.com/plugin](https://www.viewstl.com/plugin/) (legacy documentation). For v2, see [usage and API notes](docs/v2-usage.md), [release notes](docs/releases/2.0.0-rc.5.md) and [verification](docs/v2-verification.md).
 

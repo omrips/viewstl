@@ -4,7 +4,7 @@ import {
   analyzeBuffer,
   createAnalyzer,
   type AnalysisReport,
-} from "@omrips/viewstl/node";
+} from "viewstl/node";
 async function example() {
   const signal = new AbortController().signal;
   const report: AnalysisReport = await analyzeFile(
