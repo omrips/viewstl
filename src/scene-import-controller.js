@@ -1,3 +1,4 @@
+import { mergeBookmarks } from "./model-tools.js";
 import { sceneFormat, localSceneFile, sceneURL } from "./scene-import.js";
 import { assertMemory, MEMORY_OVERHEAD } from "./memory.js";
 import { modelMatrix, transform } from "./math.js";
@@ -94,6 +95,10 @@ export function importScene(source, options = {}) {
     job = null;
     check();
     const { scene, files, base } = documentData;
+    const bookmarks = mergeBookmarks(
+      this.get_camera_bookmarks(),
+      scene.camera_bookmarks || [],
+    );
     this._sceneBytes -= held;
     held =
       Object.values(files || {}).reduce((n, b) => n + b.byteLength, 0) +
@@ -198,6 +203,8 @@ export function importScene(source, options = {}) {
     if (scene.auto_rotate !== undefined)
       this.set_auto_rotate(scene.auto_rotate);
     this._restoreCamera = scene.camera_state || (hadModels ? oldCamera : null);
+    this.camera_bookmarks = bookmarks;
+    if (scene.display_units) this.display_units = scene.display_units;
     committed = true;
     return { model_ids: ids, scene, used_files: [...usedFiles] };
   })()

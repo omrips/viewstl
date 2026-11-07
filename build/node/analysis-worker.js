@@ -2866,7 +2866,8 @@ function parse3MF(buffer, limits = DEFAULT_LIMITS) {
     }
   return {
     ...finishGeometry(positions, hasColors ? colors : null, limits),
-    format: "3mf"
+    format: "3mf",
+    units: "mm"
   };
 }
 

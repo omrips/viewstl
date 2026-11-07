@@ -47,6 +47,7 @@ export class Renderer {
     this.canvas = canvas;
     this.domElement = canvas;
     this.resources = new Map();
+    this.sharedResources = new WeakMap();
     this.frames = 0;
     this.lost = false;
     this.gl = canvas.getContext("webgl2", {
@@ -63,6 +64,7 @@ export class Renderer {
       e.preventDefault();
       this.lost = true;
       this.resources.clear();
+      this.sharedResources = new WeakMap();
       this.gridResource = null;
       this.infiniteGrid = null;
       this.selectionResource = null;
@@ -175,7 +177,12 @@ export class Renderer {
     if (this.diagnostic?.model === model) this.setDiagnostic(null);
     const resources = this.resources.get(model);
     if (resources)
-      for (const resource of Object.values(resources)) this.free(resource);
+      for (const resource of Object.values(resources)) {
+        if (--resource.users === 0) {
+          this.sharedResources.get(resource.source)?.delete(resource);
+          this.free(resource);
+        }
+      }
     this.resources.delete(model);
   }
   clear() {
@@ -192,8 +199,10 @@ export class Renderer {
       (this.gridResource?.buffers.length || 0) +
       (this.selectionResource?.buffers.length || 0) +
       (this.diagnosticResource?.buffers.length || 0);
+    const unique = new Set();
     for (const r of this.resources.values())
-      for (const b of Object.values(r)) n += b.buffers.length;
+      for (const b of Object.values(r)) unique.add(b);
+    for (const b of unique) n += b.buffers.length;
     return n;
   }
   setDiagnostic(value) {
@@ -265,15 +274,31 @@ export class Renderer {
       this.resources.set(model, r);
     }
     if (!r[mode]) {
-      const g = model.geometry;
-      r[mode] =
-        mode === "edges" || mode === "wire"
-          ? this.upload(g[mode])
-          : this.upload(
-              g.positions,
-              mode === "smooth" ? g.smoothNormals : g.normals,
-              g.colors,
-            );
+      const g = model.geometry,
+        lines = mode === "edges" || mode === "wire",
+        source = lines ? g[mode] : g.positions,
+        normals = lines
+          ? undefined
+          : mode === "smooth"
+            ? g.smoothNormals
+            : g.normals,
+        colors = lines ? undefined : g.colors;
+      let entries = this.sharedResources.get(source);
+      if (!entries) this.sharedResources.set(source, (entries = new Set()));
+      let resource = [...entries].find(
+        (r) => r.normals === normals && r.colors === colors,
+      );
+      if (!resource) {
+        resource = Object.assign(this.upload(source, normals, colors), {
+          source,
+          normals,
+          colors,
+          users: 0,
+        });
+        entries.add(resource);
+      }
+      resource.users++;
+      r[mode] = resource;
     }
     return r[mode];
   }

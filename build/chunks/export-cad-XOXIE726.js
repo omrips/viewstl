@@ -1,4 +1,4 @@
-import{a as w,d as u,e as H}from"./chunk-PQYEV7WH.js";import{c as G,e as x}from"./chunk-IK3WL53C.js";var X=p=>{let N=w(p).toUpperCase(),[I,$]=N.split("E");return(I.includes(".")?I:I+".")+($===void 0?"":"E"+$)},v=p=>"'"+String(p).replace(/[\x00-\x1f\x7f]/g," ").replace(/['\\\u0080-\uffff]/g,N=>N==="'"?"''":N==="\\"?"\\\\":"\\X2\\"+N.charCodeAt(0).toString(16).padStart(4,"0").toUpperCase()+"\\X0\\")+"'";function ee(p,N,I,$){let E=new u(I);E.write(`ISO-10303-21;
+import{a as w,d as u,e as H}from"./chunk-T6PPRDOE.js";import{c as G,e as x}from"./chunk-6AW5U52H.js";var X=p=>{let N=w(p).toUpperCase(),[I,$]=N.split("E");return(I.includes(".")?I:I+".")+($===void 0?"":"E"+$)},v=p=>"'"+String(p).replace(/[\x00-\x1f\x7f]/g," ").replace(/['\\\u0080-\uffff]/g,N=>N==="'"?"''":N==="\\"?"\\\\":"\\X2\\"+N.charCodeAt(0).toString(16).padStart(4,"0").toUpperCase()+"\\X0\\")+"'";function ee(p,N,I,$){let E=new u(I);E.write(`ISO-10303-21;
 HEADER;
 FILE_DESCRIPTION(('ViewSTL mesh surfaces'),'2;1');
 `),E.write(`FILE_NAME('scene.step','${new Date().toISOString().slice(0,19)}',(''),(''),'ViewSTL','ViewSTL','');

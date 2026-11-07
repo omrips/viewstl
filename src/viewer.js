@@ -1,4 +1,18 @@
 import {
+  modelSize,
+  resizeModel,
+  setFileUnits,
+  resetModelSize,
+  duplicateModel,
+  cameraView,
+  validateBookmarks,
+  mergeBookmarks,
+  validateSizeState,
+  sizeState,
+  measureModel,
+  validateUnits,
+} from "./model-tools.js";
+import {
   validateView,
   validateSection,
   viewFeatures,
@@ -93,6 +107,8 @@ const modelKeys = [
   "units",
   "animation",
   "animation_state",
+  "size_state",
+  "display_name",
 ];
 const finite = (v, name) => {
   if (typeof v !== "number" || !Number.isFinite(v))
@@ -130,7 +146,7 @@ function modelOptions(input) {
 }
 
 export class StlViewer {
-  static version = "2.0.0-rc.5";
+  static version = "2.0.0-rc.6";
   static workerURL = null;
   constructor(parent, options = {}) {
     if (!parent?.appendChild)
@@ -159,6 +175,8 @@ export class StlViewer {
     this._sessionActive = false;
     this._frame = 0;
     this._lastTime = 0;
+    this.camera_bookmarks = [];
+    this.display_units = "mm";
     this.grid = null;
     this._gridAuto = false;
     this.camera = {
@@ -533,6 +551,16 @@ export class StlViewer {
         finite(m[key], key);
         if (key.startsWith("scale")) positive(m[key], key);
       }
+      if (supplied.size_state)
+        m.size_state = validateSizeState(supplied.size_state);
+      if (supplied.display_name != null) {
+        if (
+          typeof supplied.display_name !== "string" ||
+          supplied.display_name.length > 1024
+        )
+          throw new Error("Invalid model name");
+        m.display_name = supplied.display_name;
+      }
       m.opacity = supplied.opacity ?? supplied.mesh?.material?.opacity ?? 1;
       finite(m.opacity, "opacity");
       if (m.opacity < 0 || m.opacity > 1)
@@ -719,7 +747,7 @@ export class StlViewer {
               typeof source === "string"
                 ? new URL(source, document.baseURI).href
                 : source,
-            name: m.filename,
+            name: m.display_name || m.filename,
             limits,
             features:
               features.smooth || features.edges || features.wire
@@ -784,6 +812,7 @@ export class StlViewer {
   }
   _deleteModel(m) {
     this._stopAnimation(m, "removed");
+    for (const controller of m._measureJobs || []) controller.abort();
     for (const [controller, models] of this._printJobs || [])
       if (models.has(m)) controller.abort();
     this._printCache = null;
@@ -811,6 +840,8 @@ export class StlViewer {
     if (this.killsign) return;
     this._generation++;
     this._printCache = null;
+    this.camera_bookmarks = [];
+    this.display_units = "mm";
     this._pool?.clear();
     for (const c of this._aborters) c.abort();
     this._aborters.clear();
@@ -1297,14 +1328,44 @@ export class StlViewer {
         type,
       );
   }
-  get_model_info(id) {
+  get_model_size(id) {
+    return modelSize(this._model(id));
+  }
+  resize_model(id, factors) {
+    return resizeModel.call(this, id, factors);
+  }
+  set_file_units(id, units) {
+    return setFileUnits.call(this, id, units);
+  }
+  reset_model_size(id) {
+    return resetModelSize.call(this, id);
+  }
+  duplicate_model(id) {
+    return duplicateModel.call(this, id);
+  }
+  set_camera_view(name) {
+    return cameraView.call(this, name);
+  }
+  set_display_units(units) {
+    this.display_units = validateUnits(units);
+  }
+  get_camera_bookmarks() {
+    return structuredClone(this.camera_bookmarks || []);
+  }
+  set_camera_bookmarks(bookmarks) {
+    this.camera_bookmarks = validateBookmarks(bookmarks);
+  }
+  measure_model(id, options) {
+    return measureModel.call(this, id, options);
+  }
+  get_model_info(id, options = {}) {
     return this._guard(() => {
       const m = this._model(id),
         g = m.geometry;
       if (!g) return null;
       const s = m.scaleVector,
         key = s.join(",");
-      if (!m._stats || m._stats.key !== key)
+      if (options.measurements !== false && (!m._stats || m._stats.key !== key))
         m._stats = { key, ...scaledStats(g, s) };
       const factor = m.units === "inch" ? 1 / 25.4 : 1;
       return {
@@ -1320,8 +1381,10 @@ export class StlViewer {
         section: m.section ? { ...m.section } : null,
         color: m.color ?? (g.colors ? "#ffffff" : "#909090"),
         scale: { x: m.scalex, y: m.scaley, z: m.scalez },
-        volume: m._stats.volume * factor ** 3,
-        area: m._stats.area * factor ** 2,
+        volume:
+          options.measurements === false ? null : m._stats.volume * factor ** 3,
+        area:
+          options.measurements === false ? null : m._stats.area * factor ** 2,
         triangles: g.triangles,
         bounds: { min: [...g.bounds.min], max: [...g.bounds.max] },
         has_colors: !!g.colors,
@@ -1419,7 +1482,9 @@ export class StlViewer {
               rotationx: 0,
               rotationy: 0,
               rotationz: 0,
-              scaleVector: [m.unitScale, m.unitScale, m.unitScale],
+              scaleVector: [1, 1, 1].map(
+                () => m.unitScale * (m.size_state?.unit_factor ?? 1),
+              ),
             };
         const matrix = modelMatrix(source),
           factor = settings.units === "inch" ? 1 / 25.4 : 1;
@@ -1639,6 +1704,8 @@ export class StlViewer {
       canvas_height: this.canvas_height,
       bg_color: this.bg_color,
       camera_state: this.get_camera_state(),
+      camera_bookmarks: this.get_camera_bookmarks(),
+      display_units: this.display_units || "mm",
       auto_rotate: this.auto_rotate,
       mouse_zoom: this.mouse_zoom,
       auto_resize: this.auto_resize,
@@ -1663,6 +1730,14 @@ export class StlViewer {
               ? basename(m.filename)
               : m.filename,
           units: m.units,
+          size_state: {
+            ...structuredClone(sizeState(m)),
+            unit_factor:
+              for_vsb && !m._animation
+                ? 1
+                : m.unitScale * (sizeState(m).unit_factor ?? 1),
+          },
+          ...(m.display_name ? { display_name: m.display_name } : {}),
           display: m.display,
           opacity: m.opacity,
           view_edges: m.view_edges,
@@ -1801,6 +1876,13 @@ export class StlViewer {
         );
       else if (scene.grid) this.set_grid(true);
       if (scene.camera_state) this._restoreCamera = scene.camera_state;
+      const bookmarks = mergeBookmarks(
+        this.get_camera_bookmarks(),
+        scene.camera_bookmarks || [],
+      );
+      const displayUnits = validateUnits(
+        scene.display_units || this.display_units || "mm",
+      );
       const incoming = [];
       try {
         for (const input of scene.models) {
@@ -1855,6 +1937,8 @@ export class StlViewer {
             this._startAnimation(m, model.animation, model.animation_state);
           m._sceneImportPending = false;
         }
+        this.camera_bookmarks = bookmarks;
+        this.display_units = displayUnits;
       } catch (error) {
         for (const { m } of incoming)
           if (this._models.get(m.id) === m) this.remove_model(m.id);

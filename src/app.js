@@ -1,3 +1,4 @@
+import { bindAppTools, toolsControls } from "./app-tools.js";
 import { memoryPolicy, estimateFile } from "./memory-policy.js";
 import { scenePlacement, sceneFloor } from "./scene-layout.js";
 import { bindModelMove } from "./model-move.js";
@@ -130,6 +131,8 @@ export function mountViewstlApp(root, options = {}) {
     missing.push(...printControls.filter((id) => !$(id)));
   if (animationControls.some((id) => $(id)))
     missing.push(...animationControls.filter((id) => !$(id)));
+  if (toolsControls.some((id) => $(id)))
+    missing.push(...toolsControls.filter((id) => !$(id)));
   if (missing.length)
     throw new Error("Missing ViewSTL controls: " + missing.join(", "));
   const abort = new window.AbortController();
@@ -168,6 +171,7 @@ export function mountViewstlApp(root, options = {}) {
   let exportUI;
   let printUI;
   let animationUI;
+  let toolsUI;
   let sceneImport;
   let draining = false,
     busy = false,
@@ -227,6 +231,8 @@ export function mountViewstlApp(root, options = {}) {
     $(name + "-panel").hidden = !open;
     $(name + "-button").setAttribute("aria-expanded", String(open));
     syncSelection();
+    if (open && name === "info") populateInfo();
+    if (open && (name === "scene" || name === "view")) toolsUI?.sync();
   }
   function fileSize(size) {
     return size == null
@@ -269,13 +275,17 @@ export function mountViewstlApp(root, options = {}) {
   }
   function syncControls() {
     syncAnimatedRecord(records.get(modelID), viewer?._models.get(modelID));
-    const info = modelID === null ? null : viewer.get_model_info(modelID),
+    const info =
+        modelID === null
+          ? null
+          : viewer.get_model_info(modelID, { measurements: false }),
       mode = info?.display === "smooth" ? "flat" : info?.display || "flat";
     for (const input of modeInputs) {
       input.checked = input.value === mode;
       input.disabled = busy;
     }
-    $("view-label").textContent = viewNames[mode];
+    $("view-label").textContent = toolsUI ? "View" : viewNames[mode];
+    $("view-button").title = "View · " + viewNames[mode];
     $("smooth-shading").checked = info?.smooth_shading || false;
     $("smooth-shading").disabled = busy || mode === "wireframe";
     $("view-status").textContent =
@@ -305,21 +315,26 @@ export function mountViewstlApp(root, options = {}) {
     exportUI?.sync();
     printUI?.sync();
     animationUI?.sync();
+    toolsUI?.sync();
   }
   function populateInfo() {
     if (modelID === null) return;
-    const info = viewer.get_model_info(modelID),
+    const info = viewer.get_model_info(modelID, { measurements: false }),
       record = records.get(modelID),
-      units = record.units === "mm" ? " mm" : "";
+      factor = viewer.display_units === "inch" ? 25.4 : 1;
     $("info-triangles").textContent = info.triangles.toLocaleString();
     $("info-dimensions").textContent =
       [info.dims.x, info.dims.y, info.dims.z]
-        .map((x) => formatNumber.format(x))
-        .join(" × ") + units;
+        .map((x) => formatNumber.format(x / factor))
+        .join(" × ") + (factor === 1 ? " mm" : " in");
     $("info-size").textContent = fileSize(record.size);
-    $("unit-note").textContent = units
-      ? "Dimensions are shown in millimetres."
-      : "Dimensions are in model units. STL and OBJ files do not specify physical units.";
+    const size = viewer.get_model_size(modelID);
+    $("unit-note").textContent = size.editable
+      ? "File coordinates interpreted as " +
+        (size.file_units === "inch" ? "inches." : "millimetres (assumed).") +
+        " Change file units in Models → Size & units."
+      : "Explicit file units were converted to millimetres on import.";
+    toolsUI?.syncInfo();
   }
   function renderList() {
     $("model-list").replaceChildren(
@@ -429,10 +444,8 @@ export function mountViewstlApp(root, options = {}) {
     }
     $("position-error").hidden = true;
     $("position-units").textContent = record?.animationPivot
-      ? "Position of the model center in the scene."
-      : record?.units === "mm"
-        ? "Offset from file coordinates, in mm."
-        : "Offset from file coordinates, in model units.";
+      ? "Position of the model center in the scene, in mm."
+      : "Offset from file coordinates, in mm.";
     $("move-model-button").disabled = !record || busy;
     $("reset-position").disabled = !record;
     syncRotation(preserveFocus);
@@ -527,11 +540,11 @@ export function mountViewstlApp(root, options = {}) {
     $("move-gesture-message").textContent =
       toolHints[transformTool] + " · Scroll to adjust depth";
   }
-  function setMoveMode(enabled, tool = transformTool) {
+  function setMoveMode(enabled, tool = transformTool, retainPaused = false) {
     modelMover?.setEnabled(false);
     transformTool = tool;
     moveMode = !!enabled && modelID !== null && !busy;
-    if (moveMode) prepareManual(modelID);
+    if (moveMode && !retainPaused) prepareManual(modelID);
     modelMover?.setEnabled(moveMode);
     syncTool();
     $("move-mode").hidden = !moveMode;
@@ -726,6 +739,7 @@ export function mountViewstlApp(root, options = {}) {
   function refreshAnimatedPose() {
     if (disposed || modelID === null) return;
     syncAnimatedRecord(records.get(modelID), viewer?._models.get(modelID));
+    if (!$("info-panel").hidden) populateInfo();
     if (!$("scene-panel").hidden && $("position-details").open)
       syncPosition(true);
   }
@@ -970,7 +984,10 @@ export function mountViewstlApp(root, options = {}) {
           await engine.when_idle();
           if (token !== generation) continue;
           loadingID = null;
-          const loaded = lastLoadedID === id ? engine.get_model_info(id) : null;
+          const loaded =
+            lastLoadedID === id
+              ? engine.get_model_info(id, { measurements: false })
+              : null;
           if (!loaded) {
             announce(source.name + " could not be opened.");
             continue;
@@ -1081,7 +1098,7 @@ export function mountViewstlApp(root, options = {}) {
         );
         const record = {
           id,
-          name: String(m.orig_filename || m.filename)
+          name: String(m.display_name || m.orig_filename || m.filename)
             .split(/[\\/]/)
             .pop()
             .split(/[?#]/)[0],
@@ -1445,6 +1462,46 @@ export function mountViewstlApp(root, options = {}) {
       refreshPose: refreshAnimatedPose,
       announce,
     });
+  if ($("size-details"))
+    toolsUI = bindAppTools({
+      $,
+      listen,
+      window,
+      getViewer: () => viewer,
+      getState: () => ({ selectedId: modelID, busy }),
+      refresh: renderScene,
+      announce,
+      changeSize(operation) {
+        setMoveMode(false);
+        const record = records.get(modelID);
+        syncAnimatedRecord(record, viewer._models.get(modelID));
+        operation();
+        syncAnimatedRecord(record, viewer._models.get(modelID));
+        $("scene-arrangement").value = "custom";
+        renderScene();
+      },
+      duplicate() {
+        const original = records.get(modelID),
+          id = viewer.duplicate_model(modelID),
+          m = viewer._models.get(id);
+        const record = {
+          ...original,
+          id,
+          name: m.display_name,
+          position: { ...original.position },
+          rotation: { ...original.rotation },
+        };
+        syncAnimatedRecord(record, m);
+        record.originalPosition = { ...record.position };
+        record.originalRotation = { ...record.rotation };
+        records.set(id, record);
+        nextID = Math.max(nextID, id + 1);
+        $("scene-arrangement").value = "custom";
+        selectModel(id);
+        setMoveMode(true, "move", true);
+        announce("Copy selected at the same position. Drag to move it.");
+      },
+    });
   updateGrid();
   setBusy(false);
   setMoveMode(false);
@@ -1494,6 +1551,7 @@ export function mountViewstlApp(root, options = {}) {
       exportUI?.dispose();
       printUI?.dispose();
       animationUI?.dispose();
+      toolsUI?.dispose();
       cancelLoading();
       setMoveMode(false);
       appearanceRequest++;

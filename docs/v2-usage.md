@@ -949,3 +949,27 @@ Escape with focus inside the panel dismisses it. Reopening it from Info reveals
 and focuses the existing panel. Loading or changing the checked selection cancels
 an active check; stale results are cleared. Loading and empty scenes disable Run
 and show the current availability without closing the panel.
+
+## Model size, units, duplicates, cameras and measurements (rc.6)
+
+All operations below are implemented inside the plugin. The optional site controls remain a thin HTML/CSS host.
+
+`viewer.resize_model(id, [2, 2, 2])` doubles the model about its world-space bounds center, preserving rotation and placement. Positive finite XYZ factors are required; independent factors allow nonuniform scaling. It stops only that model's animation. `get_model_size(id)` returns dimensions and the reset baseline in millimetres. `reset_model_size(id)` restores that baseline while retaining file-unit corrections.
+
+`viewer.set_file_units(id, 'inch')` reinterprets a unitless STL/OBJ mesh (default mm) without moving its center. Switching back reverses the conversion. Explicit 3MF/STEP/IGES units are normalized to mm during parsing and cannot be reinterpreted. `set_display_units('inch')` changes the optional app's size/Info readouts only; scene coordinates, position controls and the grid remain in mm. Existing `set_model_units` and `set_scale` retain their legacy semantics.
+
+`const copy = viewer.duplicate_model(id)` returns a new ID at the same pose, with independent appearance, transforms and metadata. Immutable geometry and matching GPU buffers are shared; memory admission remains conservative. The source reference remains unchanged for VSJ, while `display_name` identifies the copy. Copied animation definitions and phase are retained but paused; the original keeps playing.
+
+`viewer.set_camera_view('top')` fits the scene from front/back/left/right/top/bottom/isometric using Z up and the existing perspective projection. It never rotates the models. Camera bookmarks are explicit data:
+
+`viewer.set_camera_bookmarks([{name: 'Detail', camera: viewer.get_camera_state()}])`
+
+Use `get_camera_bookmarks()` to obtain a defensive copy and `set_camera_state(bookmark.camera)` to restore one. Up to 32 uniquely named views (80 characters per name) are supported. They are kept in memory and in scene exports, not localStorage.
+
+`const {area_mm2, volume_mm3, volume_valid, volume_reason} = await viewer.measure_model(id)`
+
+Measurements use workers and support `signal`, `max_time_ms` (default 30 seconds) and `on_progress`. Area includes all triangles at current scale. Volume is nullable: detailed topology, intersections and shell-orientation checks must establish a closed volume. An open/invalid mesh or an inconclusive/time-limited check never becomes a plausible-looking volume. Results are cached by mesh and scale; position/rotation do not invalidate them and uniform resizing updates cached measurements algebraically. Nonuniform area is recalculated in the worker. Memory limits can reject the calculation before buffers are copied. This is a bounded mesh analysis, not a guarantee of printability.
+
+VSB/VSJ retain size baselines, file-unit interpretation, display units, duplicate labels and bookmarks. VSB still embeds geometry; VSJ still needs the referenced source files. No second unit conversion occurs during import. Appending scenes merges bookmark names with numbered suffixes; a combined total above 32 rejects the incoming scene. Old files without the new optional fields continue to load. The `size_state.unit_factor` serialization field preserves source-unit correction separately from resize factors for exports with `apply_transforms:false`.
+
+The optional app control group is listed in `src/app-tools.js` (`toolsControls`). Provide the whole group or omit it when embedding older markup. The preview's `site/index.html` is a complete example. Models contains collapsed Size & units and Duplicate; View contains collapsed Camera & saved views; Info contains area and the volume calculation. No server is involved for local files or measurements.

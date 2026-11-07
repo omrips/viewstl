@@ -647,3 +647,11 @@ explicit close from an empty scene. The panel remains open throughout unrelated
 activity while stale reports and active jobs are handled safely. All 112 Node
 tests, strict types and 14 legacy hashes pass again. Evidence: sibling website
 `results/print-persistent/` and `results/deploy-20261017-5b21747c4c8f/`.
+
+## 2026-11-07 — rc.6 model tools
+
+146 unit tests pass, as do strict browser/Node TypeScript checks and the 37-file legacy hash guard. Actual Windows Chrome 156 runs against the site built from the candidate npm tarball: 25 new model-tools integration checks, 25 animation regressions and 96 existing site regressions pass. New coverage includes locked/nonuniform resize, invalid input recovery, mm/inch separation, copy animation isolation, source references, shared geometry/GPU cleanup, camera presets, bookmark validation/merge, static and animated VSB/VSJ round trips, reset baselines, explicit 3MF/CAD units, and malformed-scene rollback. Surface area and enclosed volume use known closed/open fixtures; source-unit corrections also survive untransformed mesh export.
+
+Manual desktop checks cover size inputs, keyboard Apply and on-demand measurements. Narrow widths are viewport emulation, not physical phone tests. No physical touch device, Safari/Firefox or broad large-CAD stress testing is claimed. The bounded detailed mesh checker may return an unavailable/inconclusive volume; source coordinates without units remain assumed mm until corrected.
+
+Website evidence is retained outside its public build in `Viewstl/results/rc6/`; local-only reproducible browser harnesses are `site/qa/model-tools.html`, `animation.html` and `index.html`. Generated assets and the whole npm distribution are packaged together.

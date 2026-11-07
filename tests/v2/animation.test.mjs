@@ -30,7 +30,11 @@ function model() {
     display: "flat",
     opacity: 1,
     view_edges: false,
-    geometry: { positions: cubePositions(), triangles: 12 },
+    geometry: {
+      positions: cubePositions(),
+      triangles: 12,
+      bounds: { min: [-1, -1, -1], max: [1, 1, 1] },
+    },
   };
   Object.defineProperty(m, "scaleVector", {
     get: () => [m.scalex, m.scaley, m.scalez].map((x) => x * m.unitScale),

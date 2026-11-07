@@ -128,7 +128,9 @@ export async function checkPrintability(options = {}) {
             rotationy: 0,
             rotationz: 0,
             center: [0, 0, 0],
-            scaleVector: [model.unitScale, model.unitScale, model.unitScale],
+            scaleVector: [1, 1, 1].map(
+              () => model.unitScale * (model.size_state?.unit_factor ?? 1),
+            ),
           };
       progress({
         phase: "Starting",

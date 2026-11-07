@@ -1,51 +1,3 @@
-// src/appearance.js
-var DISPLAYS = [
-  "flat",
-  "smooth",
-  "wireframe",
-  "edges",
-  "mesh",
-  "xray",
-  "studio",
-  "orientation"
-];
-function validateView(display, smooth) {
-  if (!DISPLAYS.includes(display)) throw new Error("Invalid display mode");
-  if (typeof smooth !== "boolean")
-    throw new Error("smooth_shading must be a boolean");
-  return { display, smooth_shading: display === "smooth" || smooth };
-}
-function viewFeatures(view) {
-  return {
-    smooth: (view.smooth_shading || view.display === "smooth") && view.display !== "wireframe",
-    edges: view.view_edges || view.display === "edges",
-    wire: view.display === "wireframe",
-    edgeAngle: view.display === "edges" ? 30 : 1
-  };
-}
-function validateSection(section) {
-  if (section == null) return null;
-  if (!["x", "y", "z"].includes(section.axis))
-    throw new Error("Section axis must be x, y or z");
-  if (!Number.isFinite(section.position) || section.position < 0 || section.position > 1)
-    throw new Error("Section position must be between 0 and 1");
-  if (section.flip !== void 0 && typeof section.flip !== "boolean")
-    throw new Error("Section flip must be a boolean");
-  return {
-    axis: section.axis,
-    position: section.position,
-    flip: section.flip ?? false
-  };
-}
-function sectionPlane(bounds, section) {
-  if (!section) return [0, 0, 0, 0];
-  const axis = ["x", "y", "z"].indexOf(section.axis), sign = section.flip ? -1 : 1;
-  const plane = [0, 0, 0, 0];
-  plane[axis] = sign;
-  plane[3] = -sign * (bounds.min[axis] + (bounds.max[axis] - bounds.min[axis]) * section.position);
-  return plane;
-}
-
 // src/math.js
 var add = (a, b) => a.map((v, i) => v + b[i]);
 var sub = (a, b) => a.map((v, i) => v - b[i]);
@@ -198,6 +150,177 @@ function rayTriangle(o, d, p, i) {
   return t >= 0 ? t : Infinity;
 }
 
+// src/animation.js
+var animationKeys = [
+  "x",
+  "y",
+  "z",
+  "rotationx",
+  "rotationy",
+  "rotationz",
+  "scalex",
+  "scaley",
+  "scalez"
+];
+var isScale = (key) => key.startsWith("scale");
+var number = (value, name, positive2 = false) => {
+  if (typeof value !== "number" || !Number.isFinite(value) || Math.abs(value) > Number.MAX_SAFE_INTEGER || positive2 && value <= 0)
+    throw new Error(`Invalid animation ${name}`);
+  return value;
+};
+var object = (value, name) => {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error(`Invalid animation ${name}`);
+  return value;
+};
+function animationPose(model) {
+  return Object.fromEntries(
+    animationKeys.map((key) => [
+      key,
+      number(
+        model[key] ?? (isScale(key) ? model.scale ?? 1 : 0),
+        key,
+        isScale(key)
+      )
+    ])
+  );
+}
+function normalizeAnimation(input) {
+  object(input, "definition");
+  const result = {}, claimed = /* @__PURE__ */ new Set();
+  for (const mode of ["delta", "exact"]) {
+    if (input[mode] == null) continue;
+    const source = object(input[mode], mode), values = {};
+    const msec = number(source.msec ?? 300, "duration", true);
+    if (source.loop !== void 0 && typeof source.loop !== "boolean")
+      throw new Error("Animation loop must be a boolean");
+    const loop = mode === "delta" && !!source.loop;
+    for (const key of animationKeys) {
+      const value = source[key] ?? (isScale(key) ? source.scale : void 0);
+      if (value === void 0) continue;
+      if (claimed.has(key))
+        throw new Error(`Animation delta/exact conflict: ${key}`);
+      number(value, key, mode === "exact" && isScale(key));
+      if (loop && isScale(key) && value < 0)
+        throw new Error("Looping scale deltas cannot be negative");
+      values[key] = value;
+      claimed.add(key);
+    }
+    if (!Object.keys(values).length)
+      throw new Error("Animation track needs a transform");
+    result[mode] = { ...values, msec, ...loop ? { loop: true } : {} };
+  }
+  if (!Object.keys(result).length)
+    throw new Error("Animation needs delta or exact");
+  return result;
+}
+function normalizePlaybackState(input) {
+  object(input, "playback state");
+  if (input.version !== 1 || typeof input.paused !== "boolean")
+    throw new Error("Invalid animation playback state version or paused flag");
+  const elapsed_ms = number(input.elapsed_ms, "elapsed time");
+  if (elapsed_ms < 0) throw new Error("Invalid animation elapsed time");
+  object(input.origin, "origin");
+  for (const key of animationKeys) number(input.origin[key], key, isScale(key));
+  if (!Array.isArray(input.center) || input.center.length !== 3)
+    throw new Error("Invalid animation pivot");
+  return {
+    version: 1,
+    elapsed_ms,
+    paused: input.paused,
+    origin: animationPose(input.origin),
+    center: input.center.map((v) => number(v, "pivot"))
+  };
+}
+function createPlayback(definition, model, saved) {
+  const animation = normalizeAnimation(definition);
+  const state = saved == null ? null : normalizePlaybackState(saved);
+  const origin = state?.origin ?? animationPose(model);
+  const tracks = Object.entries(animation).map(([mode, a]) => {
+    const values = Object.entries(a).filter(
+      ([key]) => animationKeys.includes(key)
+    );
+    if (mode === "delta")
+      for (const [key, value] of values)
+        number(origin[key] + value, `${key} endpoint`, isScale(key));
+    return { mode, values, duration: a.msec, loop: !!a.loop, done: false };
+  });
+  const playback = {
+    animation,
+    origin,
+    tracks,
+    elapsed_ms: state?.elapsed_ms ?? 0,
+    paused: state?.paused ?? false,
+    last_time: null
+  };
+  evaluatePlayback({ ...playback, tracks: tracks.map((t) => ({ ...t })) }, {});
+  return playback;
+}
+function evaluatePlayback(playback, model) {
+  const updates = [];
+  for (const track of playback.tracks) {
+    if (track.done) continue;
+    const fraction = playback.elapsed_ms / track.duration;
+    const p = track.loop ? fraction : Math.min(fraction, 1);
+    for (const [key, value] of track.values) {
+      const from = playback.origin[key];
+      const to = track.mode === "delta" ? from + value * p : from * (1 - p) + value * p;
+      updates.push([key, number(to, `${key} result`, isScale(key))]);
+    }
+  }
+  let scaleChanged = false;
+  for (const [key, value] of updates) {
+    scaleChanged ||= isScale(key) && model[key] !== value;
+    model[key] = value;
+  }
+  for (const track of playback.tracks)
+    if (!track.loop && playback.elapsed_ms >= track.duration) track.done = true;
+  if (scaleChanged) model._stats = null;
+  return playback.tracks.some((track) => !track.done);
+}
+function advancePlayback(playback, model, time) {
+  if (playback.paused) return true;
+  if (playback.last_time !== null)
+    playback.elapsed_ms = number(
+      playback.elapsed_ms + Math.max(0, time - playback.last_time),
+      "elapsed time"
+    );
+  playback.last_time = time;
+  return evaluatePlayback(playback, model);
+}
+function playbackState(playback, suspended = false) {
+  return {
+    status: playback.paused ? "paused" : "running",
+    elapsed_ms: playback.elapsed_ms,
+    suspended,
+    tracks: playback.tracks.filter((t) => !t.done).map((t) => ({
+      mode: t.mode,
+      msec: t.duration,
+      loop: t.loop,
+      progress: t.loop ? playback.elapsed_ms % t.duration / t.duration : Math.min(1, playback.elapsed_ms / t.duration)
+    }))
+  };
+}
+function savePlayback(model) {
+  const p = model._animation;
+  if (!p) return null;
+  const factor = model.unitScale ?? 1;
+  const animation = structuredClone(p.animation), origin = { ...p.origin };
+  for (const key of animationKeys.filter(isScale)) {
+    origin[key] *= factor;
+    for (const track of Object.values(animation))
+      if (track[key] !== void 0) track[key] *= factor;
+  }
+  const animation_state = normalizePlaybackState({
+    version: 1,
+    origin,
+    elapsed_ms: p.elapsed_ms,
+    paused: p.paused,
+    center: [...model.center]
+  });
+  return { animation: normalizeAnimation(animation), animation_state };
+}
+
 // src/memory.js
 var MEMORY_OVERHEAD = 64 * 1024 * 1024;
 var TRIANGLE_MEMORY = 224;
@@ -213,6 +336,419 @@ function assertMemory(limits, bytes, operation = "model") {
 }
 function derivedMemory(triangles, features) {
   return MEMORY_OVERHEAD + triangles * (TRIANGLE_MEMORY + (features.smooth ? 1536 : 0) + (features.edges || features.wire ? 2048 : 0));
+}
+
+// src/print-options.js
+function printOptions(input = {}) {
+  const level = input.level ?? "basic";
+  if (!["basic", "detailed"].includes(level))
+    throw new Error("Choose basic or detailed print checks");
+  const number2 = (v, name, max = 1e9) => {
+    if (!Number.isFinite(v) || v <= 0 || v > max)
+      throw new Error(`Invalid ${name}`);
+    return v;
+  };
+  let profile = null;
+  if (input.profile != null) {
+    if (input.profile.technology !== "fdm")
+      throw new Error("Only FDM profiles are supported");
+    profile = { technology: "fdm" };
+    for (const key of ["min_wall_mm", "line_width_mm"])
+      if (input.profile[key] != null)
+        profile[key] = number2(input.profile[key], key);
+    if (input.profile.overhang_degrees != null)
+      profile.overhang_degrees = number2(
+        input.profile.overhang_degrees,
+        "overhang angle",
+        89.9
+      );
+    if (input.profile.build_volume_mm != null) {
+      if (!Array.isArray(input.profile.build_volume_mm) || input.profile.build_volume_mm.length !== 3)
+        throw new Error("Build volume requires X, Y and Z");
+      profile.build_volume_mm = input.profile.build_volume_mm.map(
+        (v) => number2(v, "build volume")
+      );
+    }
+  }
+  const time = number2(input.max_time_ms ?? 3e4, "check time limit", 12e4);
+  return {
+    level,
+    profile,
+    apply_transforms: input.apply_transforms !== false,
+    units_confirmed: input.units_confirmed === true,
+    max_time_ms: time
+  };
+}
+var printMemory = (triangles) => 64 * 1024 ** 2 + triangles * 2400;
+var printSignature = (model) => JSON.stringify([
+  model.x,
+  model.y,
+  model.z,
+  model.rotationx,
+  model.rotationy,
+  model.rotationz,
+  model.scaleVector,
+  model.center,
+  model.units,
+  model.unitScale
+]);
+
+// src/model-tools.js
+var axes = ["x", "y", "z"];
+function validateUnits(units) {
+  if (!["mm", "inch"].includes(units)) throw new Error("Choose mm or inch");
+  return units;
+}
+function validateSizeState(value) {
+  if (!value || value.version !== 1 || !Array.isArray(value.baseline_mm) || value.baseline_mm.length !== 3 || value.baseline_mm.some((v) => !Number.isFinite(v) || v < 0 || v > 1e12) || typeof value.editable !== "boolean" || value.unit_factor !== void 0 && (!Number.isFinite(value.unit_factor) || value.unit_factor <= 0 || value.unit_factor > 1e12))
+    throw new Error("Invalid saved model size");
+  return {
+    version: 1,
+    baseline_mm: [...value.baseline_mm],
+    file_units: validateUnits(value.file_units),
+    editable: value.editable,
+    unit_factor: value.unit_factor ?? 1
+  };
+}
+function sizeState(model) {
+  return model.size_state ??= {
+    version: 1,
+    baseline_mm: model.geometry.bounds.max.map(
+      (v, i) => (v - model.geometry.bounds.min[i]) * model.unitScale
+    ),
+    file_units: "mm",
+    editable: !model.geometry.units,
+    unit_factor: 1
+  };
+}
+function modelSize(model) {
+  if (!model.geometry) throw new Error("Wait for the model to finish opening");
+  const state = sizeState(model);
+  return {
+    ...structuredClone(state),
+    dimensions_mm: model.geometry.bounds.max.map(
+      (v, i) => (v - model.geometry.bounds.min[i]) * model.scaleVector[i]
+    )
+  };
+}
+function resizeModel(id, factors) {
+  const m = this._model(id);
+  modelSize(m);
+  if (!Array.isArray(factors) || factors.length !== 3 || factors.some((v) => !Number.isFinite(v) || v <= 0))
+    throw new Error("Scale must be a positive finite number");
+  const next = axes.map((a, i) => m["scale" + a] * factors[i]);
+  if (next.some((v) => !Number.isFinite(v) || v < 1e-12 || v > 1e12))
+    throw new Error("Scale is outside the supported range");
+  const center = m.geometry.bounds.min.map(
+    (v, i) => (v + m.geometry.bounds.max[i]) / 2
+  );
+  const before = transform(modelMatrix(m), center);
+  const cached = m._measurements;
+  const oldKey = m.scaleVector.join(",");
+  this._stopAnimation(m, "manual");
+  axes.forEach((a, i) => m["scale" + a] = next[i]);
+  const after = transform(modelMatrix(m), center);
+  axes.forEach((a, i) => m[a] += before[i] - after[i]);
+  m._stats = null;
+  if (cached?.key === oldKey && cached.positions === m.geometry.positions && factors.every((v) => v === factors[0])) {
+    m._measurements = {
+      ...cached,
+      key: m.scaleVector.join(","),
+      result: {
+        ...cached.result,
+        area_mm2: cached.result.area_mm2 * factors[0] ** 2,
+        volume_mm3: cached.result.volume_mm3 == null ? null : cached.result.volume_mm3 * factors[0] ** 3
+      }
+    };
+  }
+  this._invalidate();
+  return modelSize(m);
+}
+function setFileUnits(id, units) {
+  validateUnits(units);
+  const m = this._model(id), state = sizeState(m);
+  if (!state.editable)
+    throw new Error(
+      "This model has explicit file units, already converted to millimetres"
+    );
+  if (state.file_units === units) return modelSize(m);
+  const factor = units === "inch" ? 25.4 : 1 / 25.4;
+  const result = resizeModel.call(this, id, [factor, factor, factor]);
+  state.baseline_mm = state.baseline_mm.map((v) => v * factor);
+  state.file_units = units;
+  state.unit_factor = (state.unit_factor ?? 1) * factor;
+  return { ...result, ...structuredClone(state) };
+}
+function resetModelSize(id) {
+  const size = modelSize(this._model(id));
+  return resizeModel.call(
+    this,
+    id,
+    size.dimensions_mm.map((v, i) => v ? size.baseline_mm[i] / v : 1)
+  );
+}
+function duplicateModel(id) {
+  const source = this._model(id);
+  modelSize(source);
+  if (source._sceneImportPending)
+    throw new Error("Wait for the scene to finish opening");
+  if (this._models.size + 1 > this.limits.max_archive_entries || [...this._models.values()].reduce(
+    (n, m) => n + (m.geometry?.triangles || 0),
+    source.geometry.triangles
+  ) > this.limits.max_triangles)
+    throw new Error("Scene model or triangle limit exceeded");
+  assertMemory(
+    this.limits,
+    this._occupiedMemory() + geometryMemory(source.geometry),
+    "duplicate"
+  );
+  const copy = {};
+  for (const key of [
+    "filename",
+    "orig_filename",
+    "local_file",
+    "x",
+    "y",
+    "z",
+    "rotationx",
+    "rotationy",
+    "rotationz",
+    "opacity",
+    "units",
+    "display",
+    "view_edges",
+    "smooth_shading",
+    "color"
+  ])
+    copy[key] = source[key];
+  copy.id = this.max_model_id + 1;
+  if (!Number.isSafeInteger(copy.id))
+    throw new Error("Model ID limit exceeded");
+  copy.display_name = (source.display_name || source.orig_filename || source.filename || "Model").split(/[\\/]/).pop() + " \u2014 copy";
+  copy.center = [...source.center];
+  copy.unitScale = 1;
+  axes.forEach((a, i) => copy["scale" + a] = source.scaleVector[i]);
+  Object.defineProperty(copy, "scaleVector", {
+    get: () => axes.map((a) => copy["scale" + a] * copy.unitScale)
+  });
+  copy.geometry = { ...source.geometry };
+  copy.section = source.section ? { ...source.section } : null;
+  copy.size_state = structuredClone(sizeState(source));
+  copy.size_state.unit_factor = (copy.size_state.unit_factor ?? 1) * source.unitScale;
+  const saved = savePlayback(source);
+  this.max_model_id = copy.id;
+  this._models.set(copy.id, copy);
+  this.models_ref[copy.id] = this.models.length;
+  this.models.push(copy);
+  this.models_count = this._models.size;
+  if (saved)
+    this._startAnimation(copy, saved.animation, {
+      ...saved.animation_state,
+      paused: true
+    });
+  this._invalidate();
+  return copy.id;
+}
+var cameraDirections = {
+  front: [
+    [0, -1, 0],
+    [0, 0, 1]
+  ],
+  back: [
+    [0, 1, 0],
+    [0, 0, 1]
+  ],
+  left: [
+    [-1, 0, 0],
+    [0, 0, 1]
+  ],
+  right: [
+    [1, 0, 0],
+    [0, 0, 1]
+  ],
+  top: [
+    [0, 0, 1],
+    [0, 1, 0]
+  ],
+  bottom: [
+    [0, 0, -1],
+    [0, -1, 0]
+  ],
+  isometric: [
+    [1, -1, 1],
+    [0, 0, 1]
+  ]
+};
+function cameraView(name) {
+  const view = cameraDirections[name];
+  if (!view) throw new Error("Unknown camera view");
+  this.camera.position = this.camera.target.map((v, i) => v + view[0][i]);
+  this.camera.up = [...view[1]];
+  this.set_auto_zoom();
+}
+function validateBookmarks(bookmarks) {
+  if (!Array.isArray(bookmarks) || bookmarks.length > 32)
+    throw new Error("Save up to 32 camera views");
+  const names = /* @__PURE__ */ new Set();
+  return bookmarks.map((b) => {
+    const name = typeof b?.name === "string" ? b.name.trim() : "";
+    if (!name || name.length > 80 || /[\x00-\x1f]/.test(name) || names.has(name))
+      throw new Error("Use a unique view name of 1\u201380 characters");
+    names.add(name);
+    const state = {};
+    for (const key of ["position", "target", "up"]) {
+      if (!b.camera?.[key] || axes.some(
+        (a) => !Number.isFinite(b.camera[key][a]) || Math.abs(b.camera[key][a]) > 1e15
+      ))
+        throw new Error("Invalid saved camera");
+      state[key] = Object.fromEntries(axes.map((a) => [a, b.camera[key][a]]));
+    }
+    const d = axes.map((a) => state.position[a] - state.target[a]), u = axes.map((a) => state.up[a]);
+    if (Math.hypot(
+      d[1] * u[2] - d[2] * u[1],
+      d[2] * u[0] - d[0] * u[2],
+      d[0] * u[1] - d[1] * u[0]
+    ) < 1e-12)
+      throw new Error("Degenerate saved camera");
+    return { name, camera: state };
+  });
+}
+function mergeBookmarks(existing, incoming) {
+  const result = validateBookmarks(existing), names = new Set(result.map((b) => b.name));
+  for (const b of validateBookmarks(incoming)) {
+    let name = b.name, n = 2;
+    while (names.has(name)) name = b.name.slice(0, 70) + ` (${n++})`;
+    names.add(name);
+    result.push({ ...b, name });
+  }
+  return validateBookmarks(result);
+}
+async function measureModel(id, options = {}) {
+  await this.when_ready;
+  const m = this._model(id), g = m.geometry;
+  if (!g || m._sceneImportPending)
+    throw new Error("Wait for the model to finish opening");
+  const scale = m.scaleVector, key = scale.join(","), cached = m._measurements;
+  if (options.signal?.aborted)
+    throw new DOMException("Measurement cancelled", "AbortError");
+  if (cached?.positions === g.positions && cached.key === key)
+    return { ...cached.result };
+  const working = printMemory(g.triangles), occupied = this._occupiedMemory();
+  assertMemory(this.limits, occupied + working, "measurements");
+  const release = this._reserveMemory(
+    m,
+    working + geometryMemory(g),
+    "measurements"
+  );
+  const controller = new AbortController(), cancel = () => controller.abort();
+  this._aborters.add(controller);
+  (m._measureJobs ??= /* @__PURE__ */ new Set()).add(controller);
+  options.signal?.addEventListener("abort", cancel, { once: true });
+  let job, callbackError;
+  const check = () => {
+    if (controller.signal.aborted || this.killsign)
+      throw new DOMException("Measurement cancelled", "AbortError");
+    if (this._models.get(id) !== m || m.geometry.positions !== g.positions || m.scaleVector.join(",") !== key)
+      throw new Error("Model size changed. Calculate again.");
+  };
+  try {
+    const positions = new Float32Array(g.positions.length);
+    for (let start = 0; start < positions.length; start += 262144) {
+      check();
+      positions.set(g.positions.subarray(start, start + 262144), start);
+      if (start + 262144 < positions.length)
+        await new Promise((r) => setTimeout(r, 0));
+    }
+    job = this._pool.run(
+      {
+        kind: "measure",
+        positions,
+        scale,
+        area: g.area,
+        max_time_ms: options.max_time_ms ?? 3e4,
+        limits: {
+          ...this.limits,
+          max_memory_bytes: this.limits.max_memory_bytes - occupied
+        }
+      },
+      (progress) => {
+        try {
+          options.on_progress?.(progress);
+        } catch (error) {
+          callbackError = error;
+          controller.abort();
+        }
+      },
+      [positions.buffer]
+    );
+    controller.signal.addEventListener("abort", () => job.cancel(), {
+      once: true
+    });
+    check();
+    let result;
+    try {
+      result = await job;
+    } catch (error) {
+      throw callbackError || error;
+    }
+    check();
+    m._measurements = { positions: g.positions, key, result };
+    return { ...result };
+  } finally {
+    job?.cancel?.();
+    release();
+    this._aborters.delete(controller);
+    m._measureJobs.delete(controller);
+    options.signal?.removeEventListener("abort", cancel);
+  }
+}
+
+// src/appearance.js
+var DISPLAYS = [
+  "flat",
+  "smooth",
+  "wireframe",
+  "edges",
+  "mesh",
+  "xray",
+  "studio",
+  "orientation"
+];
+function validateView(display, smooth) {
+  if (!DISPLAYS.includes(display)) throw new Error("Invalid display mode");
+  if (typeof smooth !== "boolean")
+    throw new Error("smooth_shading must be a boolean");
+  return { display, smooth_shading: display === "smooth" || smooth };
+}
+function viewFeatures(view) {
+  return {
+    smooth: (view.smooth_shading || view.display === "smooth") && view.display !== "wireframe",
+    edges: view.view_edges || view.display === "edges",
+    wire: view.display === "wireframe",
+    edgeAngle: view.display === "edges" ? 30 : 1
+  };
+}
+function validateSection(section) {
+  if (section == null) return null;
+  if (!["x", "y", "z"].includes(section.axis))
+    throw new Error("Section axis must be x, y or z");
+  if (!Number.isFinite(section.position) || section.position < 0 || section.position > 1)
+    throw new Error("Section position must be between 0 and 1");
+  if (section.flip !== void 0 && typeof section.flip !== "boolean")
+    throw new Error("Section flip must be a boolean");
+  return {
+    axis: section.axis,
+    position: section.position,
+    flip: section.flip ?? false
+  };
+}
+function sectionPlane(bounds, section) {
+  if (!section) return [0, 0, 0, 0];
+  const axis = ["x", "y", "z"].indexOf(section.axis), sign = section.flip ? -1 : 1;
+  const plane = [0, 0, 0, 0];
+  plane[axis] = sign;
+  plane[3] = -sign * (bounds.min[axis] + (bounds.max[axis] - bounds.min[axis]) * section.position);
+  return plane;
 }
 
 // src/geometry.js
@@ -509,6 +1045,7 @@ var Renderer = class {
     this.canvas = canvas;
     this.domElement = canvas;
     this.resources = /* @__PURE__ */ new Map();
+    this.sharedResources = /* @__PURE__ */ new WeakMap();
     this.frames = 0;
     this.lost = false;
     this.gl = canvas.getContext("webgl2", {
@@ -525,6 +1062,7 @@ var Renderer = class {
       e.preventDefault();
       this.lost = true;
       this.resources.clear();
+      this.sharedResources = /* @__PURE__ */ new WeakMap();
       this.gridResource = null;
       this.infiniteGrid = null;
       this.selectionResource = null;
@@ -632,7 +1170,12 @@ var Renderer = class {
     if (this.diagnostic?.model === model) this.setDiagnostic(null);
     const resources = this.resources.get(model);
     if (resources)
-      for (const resource of Object.values(resources)) this.free(resource);
+      for (const resource of Object.values(resources)) {
+        if (--resource.users === 0) {
+          this.sharedResources.get(resource.source)?.delete(resource);
+          this.free(resource);
+        }
+      }
     this.resources.delete(model);
   }
   clear() {
@@ -646,8 +1189,10 @@ var Renderer = class {
   }
   get liveBuffers() {
     let n = (this.gridResource?.buffers.length || 0) + (this.selectionResource?.buffers.length || 0) + (this.diagnosticResource?.buffers.length || 0);
+    const unique = /* @__PURE__ */ new Set();
     for (const r of this.resources.values())
-      for (const b of Object.values(r)) n += b.buffers.length;
+      for (const b of Object.values(r)) unique.add(b);
+    for (const b of unique) n += b.buffers.length;
     return n;
   }
   setDiagnostic(value) {
@@ -713,12 +1258,23 @@ var Renderer = class {
       this.resources.set(model, r);
     }
     if (!r[mode]) {
-      const g = model.geometry;
-      r[mode] = mode === "edges" || mode === "wire" ? this.upload(g[mode]) : this.upload(
-        g.positions,
-        mode === "smooth" ? g.smoothNormals : g.normals,
-        g.colors
+      const g = model.geometry, lines = mode === "edges" || mode === "wire", source = lines ? g[mode] : g.positions, normals = lines ? void 0 : mode === "smooth" ? g.smoothNormals : g.normals, colors = lines ? void 0 : g.colors;
+      let entries = this.sharedResources.get(source);
+      if (!entries) this.sharedResources.set(source, entries = /* @__PURE__ */ new Set());
+      let resource = [...entries].find(
+        (r2) => r2.normals === normals && r2.colors === colors
       );
+      if (!resource) {
+        resource = Object.assign(this.upload(source, normals, colors), {
+          source,
+          normals,
+          colors,
+          users: 0
+        });
+        entries.add(resource);
+      }
+      resource.users++;
+      r[mode] = resource;
     }
     return r[mode];
   }
@@ -1090,177 +1646,6 @@ var WorkerPool = class {
   }
 };
 
-// src/animation.js
-var animationKeys = [
-  "x",
-  "y",
-  "z",
-  "rotationx",
-  "rotationy",
-  "rotationz",
-  "scalex",
-  "scaley",
-  "scalez"
-];
-var isScale = (key) => key.startsWith("scale");
-var number = (value, name, positive2 = false) => {
-  if (typeof value !== "number" || !Number.isFinite(value) || Math.abs(value) > Number.MAX_SAFE_INTEGER || positive2 && value <= 0)
-    throw new Error(`Invalid animation ${name}`);
-  return value;
-};
-var object = (value, name) => {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error(`Invalid animation ${name}`);
-  return value;
-};
-function animationPose(model) {
-  return Object.fromEntries(
-    animationKeys.map((key) => [
-      key,
-      number(
-        model[key] ?? (isScale(key) ? model.scale ?? 1 : 0),
-        key,
-        isScale(key)
-      )
-    ])
-  );
-}
-function normalizeAnimation(input) {
-  object(input, "definition");
-  const result = {}, claimed = /* @__PURE__ */ new Set();
-  for (const mode of ["delta", "exact"]) {
-    if (input[mode] == null) continue;
-    const source = object(input[mode], mode), values = {};
-    const msec = number(source.msec ?? 300, "duration", true);
-    if (source.loop !== void 0 && typeof source.loop !== "boolean")
-      throw new Error("Animation loop must be a boolean");
-    const loop = mode === "delta" && !!source.loop;
-    for (const key of animationKeys) {
-      const value = source[key] ?? (isScale(key) ? source.scale : void 0);
-      if (value === void 0) continue;
-      if (claimed.has(key))
-        throw new Error(`Animation delta/exact conflict: ${key}`);
-      number(value, key, mode === "exact" && isScale(key));
-      if (loop && isScale(key) && value < 0)
-        throw new Error("Looping scale deltas cannot be negative");
-      values[key] = value;
-      claimed.add(key);
-    }
-    if (!Object.keys(values).length)
-      throw new Error("Animation track needs a transform");
-    result[mode] = { ...values, msec, ...loop ? { loop: true } : {} };
-  }
-  if (!Object.keys(result).length)
-    throw new Error("Animation needs delta or exact");
-  return result;
-}
-function normalizePlaybackState(input) {
-  object(input, "playback state");
-  if (input.version !== 1 || typeof input.paused !== "boolean")
-    throw new Error("Invalid animation playback state version or paused flag");
-  const elapsed_ms = number(input.elapsed_ms, "elapsed time");
-  if (elapsed_ms < 0) throw new Error("Invalid animation elapsed time");
-  object(input.origin, "origin");
-  for (const key of animationKeys) number(input.origin[key], key, isScale(key));
-  if (!Array.isArray(input.center) || input.center.length !== 3)
-    throw new Error("Invalid animation pivot");
-  return {
-    version: 1,
-    elapsed_ms,
-    paused: input.paused,
-    origin: animationPose(input.origin),
-    center: input.center.map((v) => number(v, "pivot"))
-  };
-}
-function createPlayback(definition, model, saved) {
-  const animation = normalizeAnimation(definition);
-  const state = saved == null ? null : normalizePlaybackState(saved);
-  const origin = state?.origin ?? animationPose(model);
-  const tracks = Object.entries(animation).map(([mode, a]) => {
-    const values = Object.entries(a).filter(
-      ([key]) => animationKeys.includes(key)
-    );
-    if (mode === "delta")
-      for (const [key, value] of values)
-        number(origin[key] + value, `${key} endpoint`, isScale(key));
-    return { mode, values, duration: a.msec, loop: !!a.loop, done: false };
-  });
-  const playback = {
-    animation,
-    origin,
-    tracks,
-    elapsed_ms: state?.elapsed_ms ?? 0,
-    paused: state?.paused ?? false,
-    last_time: null
-  };
-  evaluatePlayback({ ...playback, tracks: tracks.map((t) => ({ ...t })) }, {});
-  return playback;
-}
-function evaluatePlayback(playback, model) {
-  const updates = [];
-  for (const track of playback.tracks) {
-    if (track.done) continue;
-    const fraction = playback.elapsed_ms / track.duration;
-    const p = track.loop ? fraction : Math.min(fraction, 1);
-    for (const [key, value] of track.values) {
-      const from = playback.origin[key];
-      const to = track.mode === "delta" ? from + value * p : from * (1 - p) + value * p;
-      updates.push([key, number(to, `${key} result`, isScale(key))]);
-    }
-  }
-  let scaleChanged = false;
-  for (const [key, value] of updates) {
-    scaleChanged ||= isScale(key) && model[key] !== value;
-    model[key] = value;
-  }
-  for (const track of playback.tracks)
-    if (!track.loop && playback.elapsed_ms >= track.duration) track.done = true;
-  if (scaleChanged) model._stats = null;
-  return playback.tracks.some((track) => !track.done);
-}
-function advancePlayback(playback, model, time) {
-  if (playback.paused) return true;
-  if (playback.last_time !== null)
-    playback.elapsed_ms = number(
-      playback.elapsed_ms + Math.max(0, time - playback.last_time),
-      "elapsed time"
-    );
-  playback.last_time = time;
-  return evaluatePlayback(playback, model);
-}
-function playbackState(playback, suspended = false) {
-  return {
-    status: playback.paused ? "paused" : "running",
-    elapsed_ms: playback.elapsed_ms,
-    suspended,
-    tracks: playback.tracks.filter((t) => !t.done).map((t) => ({
-      mode: t.mode,
-      msec: t.duration,
-      loop: t.loop,
-      progress: t.loop ? playback.elapsed_ms % t.duration / t.duration : Math.min(1, playback.elapsed_ms / t.duration)
-    }))
-  };
-}
-function savePlayback(model) {
-  const p = model._animation;
-  if (!p) return null;
-  const factor = model.unitScale ?? 1;
-  const animation = structuredClone(p.animation), origin = { ...p.origin };
-  for (const key of animationKeys.filter(isScale)) {
-    origin[key] *= factor;
-    for (const track of Object.values(animation))
-      if (track[key] !== void 0) track[key] *= factor;
-  }
-  const animation_state = normalizePlaybackState({
-    version: 1,
-    origin,
-    elapsed_ms: p.elapsed_ms,
-    paused: p.paused,
-    center: [...model.center]
-  });
-  return { animation: normalizeAnimation(animation), animation_state };
-}
-
 // src/scene-import.js
 var sceneFormat = (name) => String(name || "").match(/\.(vsb|vsj)(?:[?#]|$)/i)?.[1].toLowerCase() || "";
 function localSceneFile(reference, files) {
@@ -1320,8 +1705,8 @@ function importScene(source, options = {}) {
     await this.when_ready;
     check();
     oldCamera = this.get_camera_state();
-    const format = options.format || sceneFormat(typeof source === "string" ? source : source.name);
-    if (!["vsb", "vsj"].includes(format))
+    const format2 = options.format || sceneFormat(typeof source === "string" ? source : source.name);
+    if (!["vsb", "vsj"].includes(format2))
       throw new Error("Choose VSB or VSJ for a scene");
     let remote, relay;
     if (typeof source === "string") {
@@ -1354,8 +1739,8 @@ function importScene(source, options = {}) {
         source,
         remote,
         relay,
-        format,
-        name: `scene.${format}`,
+        format: format2,
+        name: `scene.${format2}`,
         limits
       },
       (p) => {
@@ -1376,6 +1761,10 @@ function importScene(source, options = {}) {
     job = null;
     check();
     const { scene, files, base } = documentData;
+    const bookmarks = mergeBookmarks(
+      this.get_camera_bookmarks(),
+      scene.camera_bookmarks || []
+    );
     this._sceneBytes -= held;
     held = Object.values(files || {}).reduce((n, b) => n + b.byteLength, 0) + JSON.stringify(scene).length * 2;
     this._sceneBytes += held;
@@ -1467,6 +1856,8 @@ function importScene(source, options = {}) {
     if (scene.auto_rotate !== void 0)
       this.set_auto_rotate(scene.auto_rotate);
     this._restoreCamera = scene.camera_state || (hadModels ? oldCamera : null);
+    this.camera_bookmarks = bookmarks;
+    if (scene.display_units) this.display_units = scene.display_units;
     committed = true;
     return { model_ids: ids, scene, used_files: [...usedFiles] };
   })().catch((error) => {
@@ -1486,61 +1877,6 @@ function importScene(source, options = {}) {
   this._sceneLoads.add(promise);
   return promise;
 }
-
-// src/print-options.js
-function printOptions(input = {}) {
-  const level = input.level ?? "basic";
-  if (!["basic", "detailed"].includes(level))
-    throw new Error("Choose basic or detailed print checks");
-  const number2 = (v, name, max = 1e9) => {
-    if (!Number.isFinite(v) || v <= 0 || v > max)
-      throw new Error(`Invalid ${name}`);
-    return v;
-  };
-  let profile = null;
-  if (input.profile != null) {
-    if (input.profile.technology !== "fdm")
-      throw new Error("Only FDM profiles are supported");
-    profile = { technology: "fdm" };
-    for (const key of ["min_wall_mm", "line_width_mm"])
-      if (input.profile[key] != null)
-        profile[key] = number2(input.profile[key], key);
-    if (input.profile.overhang_degrees != null)
-      profile.overhang_degrees = number2(
-        input.profile.overhang_degrees,
-        "overhang angle",
-        89.9
-      );
-    if (input.profile.build_volume_mm != null) {
-      if (!Array.isArray(input.profile.build_volume_mm) || input.profile.build_volume_mm.length !== 3)
-        throw new Error("Build volume requires X, Y and Z");
-      profile.build_volume_mm = input.profile.build_volume_mm.map(
-        (v) => number2(v, "build volume")
-      );
-    }
-  }
-  const time = number2(input.max_time_ms ?? 3e4, "check time limit", 12e4);
-  return {
-    level,
-    profile,
-    apply_transforms: input.apply_transforms !== false,
-    units_confirmed: input.units_confirmed === true,
-    max_time_ms: time
-  };
-}
-var printMemory = (triangles) => 64 * 1024 ** 2 + triangles * 2400;
-var printSignature = (model) => JSON.stringify([
-  model.x,
-  model.y,
-  model.z,
-  model.rotationx,
-  model.rotationy,
-  model.rotationz,
-  model.scaleVector,
-  model.center,
-  model.units,
-  model.unitScale
-]);
 
 // src/print-controller.js
 var reports = /* @__PURE__ */ new WeakMap();
@@ -1639,7 +1975,9 @@ async function checkPrintability(options = {}) {
         rotationy: 0,
         rotationz: 0,
         center: [0, 0, 0],
-        scaleVector: [model.unitScale, model.unitScale, model.unitScale]
+        scaleVector: [1, 1, 1].map(
+          () => model.unitScale * (model.size_state?.unit_factor ?? 1)
+        )
       };
       progress({
         phase: "Starting",
@@ -1763,8 +2101,8 @@ function exportFilename(filename, extension) {
 function exportOptions(options = {}) {
   const aliases = { stp: "step", igs: "iges" };
   const requested = String(options.format || "").toLowerCase();
-  const format = aliases[requested] || requested;
-  if (!["stl", "obj", "3mf", "step", "iges"].includes(format))
+  const format2 = aliases[requested] || requested;
+  if (!["stl", "obj", "3mf", "step", "iges"].includes(format2))
     throw new Error("Export format must be stl, obj, 3mf, step or iges");
   const units = options.units ?? "mm";
   if (!["mm", "inch"].includes(units))
@@ -1774,10 +2112,10 @@ function exportOptions(options = {}) {
       throw new Error(`${key} must be a boolean`);
   if (options.on_progress !== void 0 && typeof options.on_progress !== "function")
     throw new Error("on_progress must be a function");
-  const colors = options.colors !== false && ["obj", "3mf"].includes(format);
-  const extension = format === "obj" && colors ? "zip" : format;
+  const colors = options.colors !== false && ["obj", "3mf"].includes(format2);
+  const extension = format2 === "obj" && colors ? "zip" : format2;
   return {
-    format,
+    format: format2,
     units,
     colors,
     apply_transforms: options.apply_transforms !== false,
@@ -1970,7 +2308,9 @@ var modelKeys = [
   "section",
   "units",
   "animation",
-  "animation_state"
+  "animation_state",
+  "size_state",
+  "display_name"
 ];
 var finite = (v, name) => {
   if (typeof v !== "number" || !Number.isFinite(v))
@@ -2002,7 +2342,7 @@ function modelOptions(input) {
   return out;
 }
 var StlViewer = class _StlViewer {
-  static version = "2.0.0-rc.5";
+  static version = "2.0.0-rc.6";
   static workerURL = null;
   constructor(parent, options = {}) {
     if (!parent?.appendChild)
@@ -2031,6 +2371,8 @@ var StlViewer = class _StlViewer {
     this._sessionActive = false;
     this._frame = 0;
     this._lastTime = 0;
+    this.camera_bookmarks = [];
+    this.display_units = "mm";
     this.grid = null;
     this._gridAuto = false;
     this.camera = {
@@ -2367,6 +2709,13 @@ var StlViewer = class _StlViewer {
         finite(m[key], key);
         if (key.startsWith("scale")) positive(m[key], key);
       }
+      if (supplied.size_state)
+        m.size_state = validateSizeState(supplied.size_state);
+      if (supplied.display_name != null) {
+        if (typeof supplied.display_name !== "string" || supplied.display_name.length > 1024)
+          throw new Error("Invalid model name");
+        m.display_name = supplied.display_name;
+      }
       m.opacity = supplied.opacity ?? supplied.mesh?.material?.opacity ?? 1;
       finite(m.opacity, "opacity");
       if (m.opacity < 0 || m.opacity > 1)
@@ -2518,7 +2867,7 @@ var StlViewer = class _StlViewer {
             format: supplied.remote_format,
             relay,
             source: typeof source === "string" ? new URL(source, document.baseURI).href : source,
-            name: m.filename,
+            name: m.display_name || m.filename,
             limits,
             features: features.smooth || features.edges || features.wire ? features : null
           },
@@ -2568,6 +2917,7 @@ var StlViewer = class _StlViewer {
   }
   _deleteModel(m) {
     this._stopAnimation(m, "removed");
+    for (const controller of m._measureJobs || []) controller.abort();
     for (const [controller, models] of this._printJobs || [])
       if (models.has(m)) controller.abort();
     this._printCache = null;
@@ -2595,6 +2945,8 @@ var StlViewer = class _StlViewer {
     if (this.killsign) return;
     this._generation++;
     this._printCache = null;
+    this.camera_bookmarks = [];
+    this.display_units = "mm";
     this._pool?.clear();
     for (const c of this._aborters) c.abort();
     this._aborters.clear();
@@ -3034,12 +3386,42 @@ var StlViewer = class _StlViewer {
         type
       );
   }
-  get_model_info(id) {
+  get_model_size(id) {
+    return modelSize(this._model(id));
+  }
+  resize_model(id, factors) {
+    return resizeModel.call(this, id, factors);
+  }
+  set_file_units(id, units) {
+    return setFileUnits.call(this, id, units);
+  }
+  reset_model_size(id) {
+    return resetModelSize.call(this, id);
+  }
+  duplicate_model(id) {
+    return duplicateModel.call(this, id);
+  }
+  set_camera_view(name) {
+    return cameraView.call(this, name);
+  }
+  set_display_units(units) {
+    this.display_units = validateUnits(units);
+  }
+  get_camera_bookmarks() {
+    return structuredClone(this.camera_bookmarks || []);
+  }
+  set_camera_bookmarks(bookmarks) {
+    this.camera_bookmarks = validateBookmarks(bookmarks);
+  }
+  measure_model(id, options) {
+    return measureModel.call(this, id, options);
+  }
+  get_model_info(id, options = {}) {
     return this._guard(() => {
       const m = this._model(id), g = m.geometry;
       if (!g) return null;
       const s = m.scaleVector, key = s.join(",");
-      if (!m._stats || m._stats.key !== key)
+      if (options.measurements !== false && (!m._stats || m._stats.key !== key))
         m._stats = { key, ...scaledStats(g, s) };
       const factor = m.units === "inch" ? 1 / 25.4 : 1;
       return {
@@ -3055,8 +3437,8 @@ var StlViewer = class _StlViewer {
         section: m.section ? { ...m.section } : null,
         color: m.color ?? (g.colors ? "#ffffff" : "#909090"),
         scale: { x: m.scalex, y: m.scaley, z: m.scalez },
-        volume: m._stats.volume * factor ** 3,
-        area: m._stats.area * factor ** 2,
+        volume: options.measurements === false ? null : m._stats.volume * factor ** 3,
+        area: options.measurements === false ? null : m._stats.area * factor ** 2,
         triangles: g.triangles,
         bounds: { min: [...g.bounds.min], max: [...g.bounds.max] },
         has_colors: !!g.colors,
@@ -3144,7 +3526,9 @@ var StlViewer = class _StlViewer {
           rotationx: 0,
           rotationy: 0,
           rotationz: 0,
-          scaleVector: [m.unitScale, m.unitScale, m.unitScale]
+          scaleVector: [1, 1, 1].map(
+            () => m.unitScale * (m.size_state?.unit_factor ?? 1)
+          )
         };
         const matrix = modelMatrix(source), factor = settings.units === "inch" ? 1 / 25.4 : 1;
         for (let c = 0; c < 4; c++)
@@ -3212,8 +3596,8 @@ var StlViewer = class _StlViewer {
       );
   }
   async export_scene(options = {}) {
-    const format = String(options.format || "").toLowerCase();
-    if (!["vsb", "vsj"].includes(format))
+    const format2 = String(options.format || "").toLowerCase();
+    if (!["vsb", "vsj"].includes(format2))
       throw new Error("Scene format must be vsb or vsj");
     if (options.force_basename !== void 0 && typeof options.force_basename !== "boolean")
       throw new Error("force_basename must be a boolean");
@@ -3236,7 +3620,7 @@ var StlViewer = class _StlViewer {
     if (!models.length) throw new Error("No models to export");
     if (models.some((m) => !m.geometry))
       throw new Error("A model has not finished loading");
-    if (models.length + (format === "vsb" ? 1 : 0) > this.limits.max_archive_entries)
+    if (models.length + (format2 === "vsb" ? 1 : 0) > this.limits.max_archive_entries)
       throw new Error("Scene model count limit exceeded");
     const triangles = models.reduce((sum, m) => sum + m.geometry.triangles, 0);
     if (triangles > this.limits.max_triangles)
@@ -3244,19 +3628,19 @@ var StlViewer = class _StlViewer {
     const scene = this.get_vsj(
       true,
       !!options.force_basename,
-      format === "vsb"
+      format2 === "vsb"
     );
     const json = JSON.stringify(scene), manifestBytes = new Blob([json]).size;
     if (manifestBytes > this.limits.max_file_bytes)
       throw new Error("Scene manifest size limit exceeded");
-    if (format === "vsb" && manifestBytes + models.length * 84 + triangles * 50 > this.limits.max_uncompressed_bytes)
+    if (format2 === "vsb" && manifestBytes + models.length * 84 + triangles * 50 > this.limits.max_uncompressed_bytes)
       throw new Error("Scene archive limit exceeded");
-    const working = MEMORY_OVERHEAD + json.length * 8 + (format === "vsb" ? triangles * 512 : 0);
+    const working = MEMORY_OVERHEAD + json.length * 8 + (format2 === "vsb" ? triangles * 512 : 0);
     assertMemory(this.limits, this._occupiedMemory() + working, "scene export");
     this._exportBytes += working;
     let job, cancel, callbackError;
     try {
-      const snapshot = format === "vsb" ? models.map((m, index) => ({
+      const snapshot = format2 === "vsb" ? models.map((m, index) => ({
         id: m.id,
         triangles: m.geometry.triangles,
         positions: m.geometry.positions.slice(),
@@ -3271,7 +3655,7 @@ var StlViewer = class _StlViewer {
       });
       checkAbort();
       let blob;
-      if (format === "vsj") {
+      if (format2 === "vsj") {
         blob = new Blob([json], { type: "application/json" });
         options.on_progress?.({
           loaded: models.length,
@@ -3311,8 +3695,8 @@ var StlViewer = class _StlViewer {
       checkAbort();
       return {
         blob,
-        format,
-        filename: exportFilename(options.filename, format),
+        format: format2,
+        filename: exportFilename(options.filename, format2),
         model_ids: models.map((m) => m.id),
         triangles,
         representation: "scene"
@@ -3334,6 +3718,8 @@ var StlViewer = class _StlViewer {
       canvas_height: this.canvas_height,
       bg_color: this.bg_color,
       camera_state: this.get_camera_state(),
+      camera_bookmarks: this.get_camera_bookmarks(),
+      display_units: this.display_units || "mm",
       auto_rotate: this.auto_rotate,
       mouse_zoom: this.mouse_zoom,
       auto_resize: this.auto_resize,
@@ -3354,6 +3740,11 @@ var StlViewer = class _StlViewer {
           id: for_vsb ? -1 : m.id,
           filename: for_vsb ? `${m.id}.stl` : force_basename ? basename(m.filename) : m.filename,
           units: m.units,
+          size_state: {
+            ...structuredClone(sizeState(m)),
+            unit_factor: for_vsb && !m._animation ? 1 : m.unitScale * (sizeState(m).unit_factor ?? 1)
+          },
+          ...m.display_name ? { display_name: m.display_name } : {},
           display: m.display,
           opacity: m.opacity,
           view_edges: m.view_edges,
@@ -3476,6 +3867,13 @@ var StlViewer = class _StlViewer {
         );
       else if (scene.grid) this.set_grid(true);
       if (scene.camera_state) this._restoreCamera = scene.camera_state;
+      const bookmarks = mergeBookmarks(
+        this.get_camera_bookmarks(),
+        scene.camera_bookmarks || []
+      );
+      const displayUnits = validateUnits(
+        scene.display_units || this.display_units || "mm"
+      );
       const incoming = [];
       try {
         for (const input of scene.models) {
@@ -3523,6 +3921,8 @@ var StlViewer = class _StlViewer {
             this._startAnimation(m, model.animation, model.animation_state);
           m._sceneImportPending = false;
         }
+        this.camera_bookmarks = bookmarks;
+        this.display_units = displayUnits;
       } catch (error) {
         for (const { m } of incoming)
           if (this._models.get(m.id) === m) this.remove_model(m.id);
@@ -3665,6 +4065,299 @@ var StlViewer = class _StlViewer {
   }
 };
 
+// src/app-tools.js
+var toolsControls = [
+  "size-details",
+  "size-fields",
+  "size-x",
+  "size-y",
+  "size-z",
+  "size-lock",
+  "size-percent",
+  "size-apply",
+  "size-cancel",
+  "size-reset",
+  "size-error",
+  "file-units",
+  "file-units-note",
+  "display-units",
+  "size-unit-label",
+  "duplicate-model",
+  "camera-preset",
+  "bookmark-name",
+  "bookmark-list",
+  "bookmark-save",
+  "bookmark-restore",
+  "bookmark-rename",
+  "bookmark-delete",
+  "camera-error",
+  "info-area",
+  "info-volume",
+  "measure-model",
+  "measure-cancel",
+  "measure-status"
+];
+var axes2 = ["x", "y", "z"];
+var format = new Intl.NumberFormat(void 0, { maximumSignificantDigits: 7 });
+function bindAppTools({
+  $,
+  listen,
+  window: window2,
+  getViewer,
+  getState,
+  changeSize,
+  duplicate,
+  refresh,
+  announce
+}) {
+  let draftKind = null, lastAxis = 0, base = null, selected = null, measurement = null, disposed = false;
+  const error = (id, message = "") => {
+    $(id).textContent = message;
+    $(id).hidden = !message;
+  };
+  const factor = () => getViewer()?.display_units === "inch" ? 25.4 : 1;
+  const value = (v) => Number(v.toPrecision(10));
+  function syncInfo() {
+    const v = getViewer(), { selectedId, busy } = getState(), m = v?._models.get(selectedId);
+    const s = m?.scaleVector, cached = m?._measurements;
+    const valid = cached && cached.positions === m.geometry.positions && cached.key === s.join(",");
+    const unit = factor() === 1 ? "mm" : "in";
+    const area = valid ? cached.result.area_mm2 : s && s[0] === s[1] && s[1] === s[2] ? m.geometry.area * s[0] ** 2 : null;
+    $("info-area").textContent = area == null ? "Calculate" : format.format(area / factor() ** 2) + " " + unit + "\xB2";
+    $("info-volume").textContent = valid ? cached.result.volume_valid ? format.format(cached.result.volume_mm3 / factor() ** 3) + " " + unit + "\xB3" : "Unavailable" : "Not checked";
+    if (!measurement)
+      $("measure-status").textContent = valid ? cached.result.volume_reason : "Calculate to check enclosed volume. Runs on your device.";
+    $("measure-model").disabled = busy || !m || !!measurement;
+    $("measure-cancel").hidden = !measurement;
+  }
+  function syncBookmarks() {
+    const v = getViewer(), previous = $("bookmark-list").value, bookmarks = v?.get_camera_bookmarks() || [];
+    $("bookmark-list").replaceChildren(
+      ...bookmarks.map((b) => {
+        const option = window2.document.createElement("option");
+        option.value = b.name;
+        option.textContent = b.name;
+        return option;
+      })
+    );
+    if (bookmarks.some((b) => b.name === previous))
+      $("bookmark-list").value = previous;
+    for (const id of [
+      "bookmark-restore",
+      "bookmark-rename",
+      "bookmark-delete",
+      "bookmark-list"
+    ])
+      $(id).disabled = !bookmarks.length;
+    $("bookmark-save").disabled = !v || bookmarks.length >= 32;
+  }
+  function sync() {
+    if (disposed) return;
+    const { selectedId, busy } = getState(), v = getViewer(), m = v?._models.get(selectedId);
+    if (selectedId !== selected) {
+      measurement?.abort();
+      selected = selectedId;
+    }
+    draftKind = null;
+    base = m?.geometry ? v.get_model_size(selectedId) : null;
+    $("size-fields").disabled = busy || !base;
+    $("duplicate-model").disabled = busy || !base;
+    $("display-units").value = v?.display_units || "mm";
+    $("size-unit-label").textContent = factor() === 1 ? "Dimensions in mm" : "Dimensions in inches";
+    $("file-units").value = base?.file_units || "mm";
+    $("file-units").disabled = busy || !base?.editable;
+    $("file-units-note").textContent = base?.editable ? "STL/OBJ have no units. Millimetres are assumed; choose inches to correct the physical size." : "Explicit file units were converted to millimetres on import.";
+    axes2.forEach((a, i) => {
+      $("size-" + a).value = base ? value(base.dimensions_mm[i] / factor()) : "";
+      $("size-" + a).disabled = !base || base.dimensions_mm[i] === 0;
+    });
+    const ratios = base?.baseline_mm.map((v2, i) => v2 ? base.dimensions_mm[i] / v2 : null).filter((v2) => v2 != null) || [];
+    $("size-percent").value = ratios.length && ratios.every((v2) => Math.abs(v2 / ratios[0] - 1) < 1e-8) ? value(ratios[0] * 100) : "";
+    error("size-error");
+    syncInfo();
+    syncBookmarks();
+  }
+  const attempt = (id, action) => {
+    try {
+      action();
+      error(id);
+    } catch (e) {
+      error(id, e.message);
+    }
+  };
+  axes2.forEach(
+    (a, i) => listen($("size-" + a), "input", () => {
+      if (!base) return;
+      draftKind = "axis";
+      lastAxis = i;
+      const n = $("size-" + a).valueAsNumber;
+      if (!Number.isFinite(n) || n <= 0) return;
+      if ($("size-lock").checked)
+        axes2.forEach((axis, j) => {
+          if (i !== j)
+            $("size-" + axis).value = value(
+              n * base.dimensions_mm[j] / base.dimensions_mm[i]
+            );
+        });
+      $("size-percent").value = "";
+    })
+  );
+  listen($("size-percent"), "input", () => {
+    draftKind = "percent";
+    const n = $("size-percent").valueAsNumber;
+    if (base && Number.isFinite(n) && n > 0)
+      axes2.forEach(
+        (a, i) => $("size-" + a).value = value(
+          base.baseline_mm[i] * n / 100 / factor()
+        )
+      );
+  });
+  listen(
+    $("size-apply"),
+    "click",
+    () => attempt("size-error", () => {
+      if (!base) return;
+      if (!draftKind) return;
+      const current = getViewer().get_model_size(selected).dimensions_mm;
+      let desired = axes2.map((a) => $("size-" + a).valueAsNumber * factor());
+      if (draftKind === "percent") {
+        const percent = $("size-percent").valueAsNumber;
+        if (!Number.isFinite(percent) || percent <= 0)
+          throw new Error("Enter a positive scale percentage.");
+        desired = base.baseline_mm.map((v) => v * percent / 100);
+      } else if ($("size-lock").checked) {
+        const ratio = desired[lastAxis] / base.dimensions_mm[lastAxis];
+        desired = base.dimensions_mm.map((v) => v * ratio);
+      }
+      let ratios = desired.map((n, i) => {
+        if (!Number.isFinite(n) || n < 0 || current[i] > 0 && n === 0)
+          throw new Error("Enter positive dimensions for each non-flat axis.");
+        return current[i] ? n / current[i] : 1;
+      });
+      if (ratios.every((v) => Math.abs(v / ratios[0] - 1) < 1e-12))
+        ratios = ratios.map(() => ratios[0]);
+      changeSize(() => getViewer().resize_model(selected, ratios));
+      announce("Model size updated.");
+    })
+  );
+  listen($("size-cancel"), "click", sync);
+  listen(
+    $("size-reset"),
+    "click",
+    () => attempt("size-error", () => {
+      changeSize(() => getViewer().reset_model_size(selected));
+      announce("Original size restored; file-unit correction retained.");
+    })
+  );
+  listen(
+    $("file-units"),
+    "change",
+    () => attempt("size-error", () => {
+      changeSize(
+        () => getViewer().set_file_units(selected, $("file-units").value)
+      );
+      announce("File units corrected.");
+    })
+  );
+  listen($("display-units"), "change", () => {
+    getViewer()?.set_display_units($("display-units").value);
+    refresh();
+  });
+  listen($("duplicate-model"), "click", () => attempt("size-error", duplicate));
+  listen(
+    $("camera-preset"),
+    "change",
+    () => attempt("camera-error", () => {
+      if ($("camera-preset").value)
+        getViewer().set_camera_view($("camera-preset").value);
+      announce("Camera view updated.");
+      $("camera-preset").value = "";
+    })
+  );
+  const editBookmarks = (action) => attempt("camera-error", () => {
+    const v = getViewer(), bookmarks = v.get_camera_bookmarks();
+    action(bookmarks, v);
+    v.set_camera_bookmarks(bookmarks);
+    syncBookmarks();
+  });
+  listen(
+    $("bookmark-save"),
+    "click",
+    () => editBookmarks((b, v) => {
+      b.push({ name: $("bookmark-name").value, camera: v.get_camera_state() });
+    })
+  );
+  listen(
+    $("bookmark-rename"),
+    "click",
+    () => editBookmarks((b) => {
+      b.find((b2) => b2.name === $("bookmark-list").value).name = $("bookmark-name").value;
+    })
+  );
+  listen(
+    $("bookmark-delete"),
+    "click",
+    () => editBookmarks((b) => {
+      b.splice(
+        b.findIndex((b2) => b2.name === $("bookmark-list").value),
+        1
+      );
+    })
+  );
+  listen(
+    $("bookmark-restore"),
+    "click",
+    () => attempt("camera-error", () => {
+      const b = getViewer().get_camera_bookmarks().find((b2) => b2.name === $("bookmark-list").value);
+      if (b) {
+        getViewer().set_camera_state(b.camera);
+        announce("Saved view restored.");
+      }
+    })
+  );
+  listen(
+    $("bookmark-list"),
+    "change",
+    () => $("bookmark-name").value = $("bookmark-list").value
+  );
+  listen($("measure-cancel"), "click", () => measurement?.abort());
+  listen($("measure-model"), "click", async () => {
+    const id = selected, v = getViewer(), controller = new window2.AbortController();
+    measurement = controller;
+    syncInfo();
+    $("measure-status").textContent = "Calculating area and checking volume\u2026";
+    try {
+      await v.measure_model(id, {
+        signal: controller.signal,
+        on_progress: (p) => {
+          if (selected === id && !disposed)
+            $("measure-status").textContent = p.phase + "\u2026";
+        }
+      });
+      if (!disposed && selected === id) announce("Measurements ready.");
+    } catch (e) {
+      if (!disposed && selected === id)
+        $("measure-status").textContent = e.name === "AbortError" ? "Calculation cancelled." : e.message;
+    } finally {
+      const message = $("measure-status").textContent;
+      if (measurement === controller) measurement = null;
+      if (!disposed) {
+        syncInfo();
+        if (!v._models.get(id)?._measurements && selected === id)
+          $("measure-status").textContent = message;
+      }
+    }
+  });
+  return {
+    sync,
+    syncInfo,
+    dispose() {
+      disposed = true;
+      measurement?.abort();
+    }
+  };
+}
+
 // src/memory-policy.js
 var GiB = 1024 ** 3;
 var MiB = 1024 ** 2;
@@ -3696,9 +4389,9 @@ async function estimateFile(file) {
 }
 
 // src/model-transform.js
-var axes = ["x", "y", "z"];
-var vector2 = (p) => axes.map((a) => p[a]);
-var object2 = (p) => Object.fromEntries(axes.map((a, i) => [a, p[i]]));
+var axes3 = ["x", "y", "z"];
+var vector2 = (p) => axes3.map((a) => p[a]);
+var object2 = (p) => Object.fromEntries(axes3.map((a, i) => [a, p[i]]));
 var dot2 = (a, b) => a.reduce((sum, v, i) => sum + v * b[i], 0);
 var norm2 = (a) => {
   const n = Math.hypot(...a) || 1;
@@ -3730,7 +4423,7 @@ function rotationMatrix(degrees = { x: 0, y: 0, z: 0 }) {
 var centerOf = (bounds) => bounds.min.map((v, i) => (v + bounds.max[i]) / 2);
 function modelCenter(model) {
   return object2(
-    centerOf(model.bounds).map((v, i) => v + model.position[axes[i]])
+    centerOf(model.bounds).map((v, i) => v + model.position[axes3[i]])
   );
 }
 function modelRadius(model) {
@@ -3741,7 +4434,7 @@ function modelRadius(model) {
 }
 function enginePosition(model) {
   const c = centerOf(model.bounds), rotated = transform2(rotationMatrix(model.rotation), c);
-  return object2(c.map((v, i) => model.position[axes[i]] + v - rotated[i]));
+  return object2(c.map((v, i) => model.position[axes3[i]] + v - rotated[i]));
 }
 function modelBounds(model) {
   if (!model.rotation || !Object.values(model.rotation).some((v) => v % 360))
@@ -4082,16 +4775,16 @@ function bindAppExport({
     $("save-error").textContent = "";
   };
   function formatChanged() {
-    const format = $("save-format").value;
+    const format2 = $("save-format").value;
     if (!$("save-name").value || $("save-name").value === lastSuggestedName) {
       suggestedName();
     }
     if ($("save-mesh-note")) $("save-mesh-note").hidden = isScene();
     if ($("save-scene-note")) $("save-scene-note").hidden = !isScene();
-    $("save-colors-row").hidden = !["obj", "3mf"].includes(format);
-    $("save-cad-note").hidden = !["step", "iges"].includes(format);
+    $("save-colors-row").hidden = !["obj", "3mf"].includes(format2);
+    $("save-cad-note").hidden = !["step", "iges"].includes(format2);
     $("save-format-note").textContent = $("save-format").selectedOptions[0]?.dataset.note || "";
-    $("save-submit").textContent = format === "obj" && $("save-colors").checked ? "Download ZIP" : "Download file";
+    $("save-submit").textContent = format2 === "obj" && $("save-colors").checked ? "Download ZIP" : "Download file";
     sync();
   }
   function suggestedName() {
@@ -4542,7 +5235,7 @@ var animationControls = [
   "animation-status",
   "animation-error"
 ];
-var axes2 = ["x", "y", "z"];
+var axes4 = ["x", "y", "z"];
 function syncAnimatedRecord(record, model) {
   if (!record || !model?.geometry) return;
   record.bounds = Object.fromEntries(
@@ -4554,11 +5247,11 @@ function syncAnimatedRecord(record, model) {
     ])
   );
   record.rotation = Object.fromEntries(
-    axes2.map((a) => [a, model["rotation" + a] * 180 / Math.PI % 360])
+    axes4.map((a) => [a, model["rotation" + a] * 180 / Math.PI % 360])
   );
   record.position = { x: 0, y: 0, z: 0 };
   const offset = enginePosition(record);
-  for (const a of axes2) record.position[a] = model[a] - offset[a];
+  for (const a of axes4) record.position[a] = model[a] - offset[a];
 }
 function centerAnimationPivot(record, model) {
   syncAnimatedRecord(record, model);
@@ -4571,10 +5264,10 @@ function centerAnimationPivot(record, model) {
   const rotation2 = rotationMatrix(record.rotation);
   const original = record.originalPosition || { x: 0, y: 0, z: 0 };
   record.originalPosition = Object.fromEntries(
-    axes2.map((a, i) => [a, original[a] + delta[i]])
+    axes4.map((a, i) => [a, original[a] + delta[i]])
   );
   for (let i = 0; i < 3; i++)
-    model[axes2[i]] += delta.reduce(
+    model[axes4[i]] += delta.reduce(
       (sum, v, j) => sum + rotation2[i * 3 + j] * v,
       0
     );
@@ -4583,7 +5276,7 @@ function centerAnimationPivot(record, model) {
   syncAnimatedRecord(record, model);
 }
 function spinDefinition(axis, seconds, direction) {
-  if (!axes2.includes(axis) || !Number.isFinite(seconds) || seconds < 0.1 || seconds > 3600 || !["1", "-1"].includes(direction))
+  if (!axes4.includes(axis) || !Number.isFinite(seconds) || seconds < 0.1 || seconds > 3600 || !["1", "-1"].includes(direction))
     throw new Error("Choose an axis and a duration from 0.1 to 3,600 seconds.");
   return {
     delta: {
@@ -4840,6 +5533,8 @@ function mountViewstlApp(root, options = {}) {
     missing.push(...printControls.filter((id) => !$(id)));
   if (animationControls.some((id) => $(id)))
     missing.push(...animationControls.filter((id) => !$(id)));
+  if (toolsControls.some((id) => $(id)))
+    missing.push(...toolsControls.filter((id) => !$(id)));
   if (missing.length)
     throw new Error("Missing ViewSTL controls: " + missing.join(", "));
   const abort = new window2.AbortController();
@@ -4868,6 +5563,7 @@ function mountViewstlApp(root, options = {}) {
   let exportUI;
   let printUI;
   let animationUI;
+  let toolsUI;
   let sceneImport;
   let draining = false, busy = false, gridEnabled = false, gridHeight = 0, gridSpacing = 1, moveMode = false, transformTool = "move", modelMover, dragArrangement, background = "transparent";
   const viewNames = {
@@ -4916,6 +5612,8 @@ function mountViewstlApp(root, options = {}) {
     $(name + "-panel").hidden = !open;
     $(name + "-button").setAttribute("aria-expanded", String(open));
     syncSelection();
+    if (open && name === "info") populateInfo();
+    if (open && (name === "scene" || name === "view")) toolsUI?.sync();
   }
   function fileSize(size) {
     return size == null ? "Sample model" : size < 1024 ** 2 ? `${formatNumber.format(size / 1024)} KiB` : size < 1024 ** 3 ? `${formatNumber.format(size / 1024 ** 2)} MiB` : `${formatNumber.format(size / 1024 ** 3)} GiB`;
@@ -4942,12 +5640,13 @@ function mountViewstlApp(root, options = {}) {
   }
   function syncControls() {
     syncAnimatedRecord(records.get(modelID), viewer?._models.get(modelID));
-    const info = modelID === null ? null : viewer.get_model_info(modelID), mode = info?.display === "smooth" ? "flat" : info?.display || "flat";
+    const info = modelID === null ? null : viewer.get_model_info(modelID, { measurements: false }), mode = info?.display === "smooth" ? "flat" : info?.display || "flat";
     for (const input of modeInputs) {
       input.checked = input.value === mode;
       input.disabled = busy;
     }
-    $("view-label").textContent = viewNames[mode];
+    $("view-label").textContent = toolsUI ? "View" : viewNames[mode];
+    $("view-button").title = "View \xB7 " + viewNames[mode];
     $("smooth-shading").checked = info?.smooth_shading || false;
     $("smooth-shading").disabled = busy || mode === "wireframe";
     $("view-status").textContent = mode === "wireframe" ? "Smooth shading is available in surface views." : "Shading changes the appearance, not the geometry.";
@@ -4971,14 +5670,17 @@ function mountViewstlApp(root, options = {}) {
     exportUI?.sync();
     printUI?.sync();
     animationUI?.sync();
+    toolsUI?.sync();
   }
   function populateInfo() {
     if (modelID === null) return;
-    const info = viewer.get_model_info(modelID), record = records.get(modelID), units = record.units === "mm" ? " mm" : "";
+    const info = viewer.get_model_info(modelID, { measurements: false }), record = records.get(modelID), factor = viewer.display_units === "inch" ? 25.4 : 1;
     $("info-triangles").textContent = info.triangles.toLocaleString();
-    $("info-dimensions").textContent = [info.dims.x, info.dims.y, info.dims.z].map((x) => formatNumber.format(x)).join(" \xD7 ") + units;
+    $("info-dimensions").textContent = [info.dims.x, info.dims.y, info.dims.z].map((x) => formatNumber.format(x / factor)).join(" \xD7 ") + (factor === 1 ? " mm" : " in");
     $("info-size").textContent = fileSize(record.size);
-    $("unit-note").textContent = units ? "Dimensions are shown in millimetres." : "Dimensions are in model units. STL and OBJ files do not specify physical units.";
+    const size = viewer.get_model_size(modelID);
+    $("unit-note").textContent = size.editable ? "File coordinates interpreted as " + (size.file_units === "inch" ? "inches." : "millimetres (assumed).") + " Change file units in Models \u2192 Size & units." : "Explicit file units were converted to millimetres on import.";
+    toolsUI?.syncInfo();
   }
   function renderList() {
     $("model-list").replaceChildren(
@@ -5080,7 +5782,7 @@ function mountViewstlApp(root, options = {}) {
       input.removeAttribute("aria-invalid");
     }
     $("position-error").hidden = true;
-    $("position-units").textContent = record?.animationPivot ? "Position of the model center in the scene." : record?.units === "mm" ? "Offset from file coordinates, in mm." : "Offset from file coordinates, in model units.";
+    $("position-units").textContent = record?.animationPivot ? "Position of the model center in the scene, in mm." : "Offset from file coordinates, in mm.";
     $("move-model-button").disabled = !record || busy;
     $("reset-position").disabled = !record;
     syncRotation(preserveFocus);
@@ -5163,11 +5865,11 @@ function mountViewstlApp(root, options = {}) {
     $("model-tool").value = transformTool;
     $("move-gesture-message").textContent = toolHints[transformTool] + " \xB7 Scroll to adjust depth";
   }
-  function setMoveMode(enabled, tool = transformTool) {
+  function setMoveMode(enabled, tool = transformTool, retainPaused = false) {
     modelMover?.setEnabled(false);
     transformTool = tool;
     moveMode = !!enabled && modelID !== null && !busy;
-    if (moveMode) prepareManual(modelID);
+    if (moveMode && !retainPaused) prepareManual(modelID);
     modelMover?.setEnabled(moveMode);
     syncTool();
     $("move-mode").hidden = !moveMode;
@@ -5344,6 +6046,7 @@ function mountViewstlApp(root, options = {}) {
   function refreshAnimatedPose() {
     if (disposed || modelID === null) return;
     syncAnimatedRecord(records.get(modelID), viewer?._models.get(modelID));
+    if (!$("info-panel").hidden) populateInfo();
     if (!$("scene-panel").hidden && $("position-details").open)
       syncPosition(true);
   }
@@ -5468,7 +6171,7 @@ function mountViewstlApp(root, options = {}) {
     if (queue.length && !draining) drainPromise = drainQueue();
     return drainPromise || Promise.resolve();
   }
-  function openURL(value, format = "") {
+  function openURL(value, format2 = "") {
     assertActive();
     if (!options.url_import_endpoint)
       throw new Error("URL imports are not configured.");
@@ -5477,7 +6180,7 @@ function mountViewstlApp(root, options = {}) {
       throw new Error(
         "Use a public HTTP or HTTPS file URL without login credentials."
       );
-    if (format && !/^(stl|obj|3mf|step|stp|iges|igs|vsb|vsj)$/.test(format))
+    if (format2 && !/^(stl|obj|3mf|step|stp|iges|igs|vsb|vsj)$/.test(format2))
       throw new Error("Choose a supported 3D format.");
     url.hash = "";
     const name = decodeURIComponent(
@@ -5486,9 +6189,9 @@ function mountViewstlApp(root, options = {}) {
     queue.push({
       name,
       remote: url.href,
-      format,
+      format: format2,
       size: 0,
-      scene: ["vsb", "vsj"].includes(format) ? format : sceneFormat(name)
+      scene: ["vsb", "vsj"].includes(format2) ? format2 : sceneFormat(name)
     });
     if (!draining) drainPromise = drainQueue();
     return drainPromise || Promise.resolve();
@@ -5557,7 +6260,7 @@ function mountViewstlApp(root, options = {}) {
           await engine.when_idle();
           if (token !== generation) continue;
           loadingID = null;
-          const loaded = lastLoadedID === id ? engine.get_model_info(id) : null;
+          const loaded = lastLoadedID === id ? engine.get_model_info(id, { measurements: false }) : null;
           if (!loaded) {
             announce(source.name + " could not be opened.");
             continue;
@@ -5649,7 +6352,7 @@ function mountViewstlApp(root, options = {}) {
         );
         const record = {
           id,
-          name: String(m.orig_filename || m.filename).split(/[\\/]/).pop().split(/[?#]/)[0],
+          name: String(m.display_name || m.orig_filename || m.filename).split(/[\\/]/).pop().split(/[?#]/)[0],
           size: g.file_bytes ?? m.local_file?.size ?? null,
           units: g.units || m.units,
           bounds,
@@ -5978,6 +6681,44 @@ function mountViewstlApp(root, options = {}) {
       refreshPose: refreshAnimatedPose,
       announce
     });
+  if ($("size-details"))
+    toolsUI = bindAppTools({
+      $,
+      listen,
+      window: window2,
+      getViewer: () => viewer,
+      getState: () => ({ selectedId: modelID, busy }),
+      refresh: renderScene,
+      announce,
+      changeSize(operation) {
+        setMoveMode(false);
+        const record = records.get(modelID);
+        syncAnimatedRecord(record, viewer._models.get(modelID));
+        operation();
+        syncAnimatedRecord(record, viewer._models.get(modelID));
+        $("scene-arrangement").value = "custom";
+        renderScene();
+      },
+      duplicate() {
+        const original = records.get(modelID), id = viewer.duplicate_model(modelID), m = viewer._models.get(id);
+        const record = {
+          ...original,
+          id,
+          name: m.display_name,
+          position: { ...original.position },
+          rotation: { ...original.rotation }
+        };
+        syncAnimatedRecord(record, m);
+        record.originalPosition = { ...record.position };
+        record.originalRotation = { ...record.rotation };
+        records.set(id, record);
+        nextID = Math.max(nextID, id + 1);
+        $("scene-arrangement").value = "custom";
+        selectModel(id);
+        setMoveMode(true, "move", true);
+        announce("Copy selected at the same position. Drag to move it.");
+      }
+    });
   updateGrid();
   setBusy(false);
   setMoveMode(false);
@@ -6026,6 +6767,7 @@ function mountViewstlApp(root, options = {}) {
       exportUI?.dispose();
       printUI?.dispose();
       animationUI?.dispose();
+      toolsUI?.dispose();
       cancelLoading();
       setMoveMode(false);
       appearanceRequest++;

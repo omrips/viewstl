@@ -131,7 +131,28 @@ export interface GeometryData {
   positions: Float32Array | number[];
   colors?: Float32Array | number[] | null;
 }
+export interface ModelSize {
+  version: 1;
+  baseline_mm: [number, number, number];
+  unit_factor?: number;
+  file_units: Units;
+  editable: boolean;
+  dimensions_mm: [number, number, number];
+}
+export interface CameraBookmark {
+  name: string;
+  camera: CameraState;
+}
+export interface ModelMeasurements {
+  area_mm2: number;
+  volume_mm3: number | null;
+  volume_valid: boolean;
+  volume_reason: string;
+}
 export interface ModelOptions extends Transform {
+  /** Display label; filename remains the source reference for VSJ. */
+  display_name?: string;
+  size_state?: Omit<ModelSize, "dimensions_mm">;
   id?: number;
   filename?: string;
   /** Retrieve a public URL through the explicitly configured same-origin relay. */
@@ -247,6 +268,8 @@ export interface Scene {
   auto_rotate: boolean;
   mouse_zoom: boolean;
   auto_resize: boolean;
+  camera_bookmarks?: CameraBookmark[];
+  display_units?: Units;
   center_models: boolean;
   grid?: boolean;
   infinite_grid?: { spacing: number; height: number };
@@ -324,6 +347,31 @@ export class StlViewer {
   set_camera_state(state: Partial<CameraState>): void;
   set_camera(x?: number, y?: number, z?: number): void;
   get_model_info(id: number): ModelInfo | null;
+  get_model_info(
+    id: number,
+    options: { measurements: false },
+  ): (Omit<ModelInfo, "area" | "volume"> & { area: null; volume: null }) | null;
+  get_model_size(id: number): ModelSize;
+  /** Multiplicative XYZ factors about the world-space center. Throws on invalid input. */
+  resize_model(id: number, factors: [number, number, number]): ModelSize;
+  set_file_units(id: number, units: Units): ModelSize;
+  reset_model_size(id: number): ModelSize;
+  duplicate_model(id: number): number;
+  display_units: Units;
+  set_display_units(units: Units): void;
+  set_camera_view(
+    name: "front" | "back" | "left" | "right" | "top" | "bottom" | "isometric",
+  ): void;
+  get_camera_bookmarks(): CameraBookmark[];
+  set_camera_bookmarks(bookmarks: CameraBookmark[]): void;
+  measure_model(
+    id: number,
+    options?: {
+      signal?: AbortSignal;
+      max_time_ms?: number;
+      on_progress?: (progress: { phase: string; elapsed_ms: number }) => void;
+    },
+  ): Promise<ModelMeasurements>;
   get_model_data(id: number): GeometryData | null;
   get_model_mesh(id: number): unknown;
   get_stl_bin(id: number): ArrayBuffer | null;

@@ -1,3 +1,8 @@
+import {
+  validateBookmarks,
+  validateSizeState,
+  validateUnits,
+} from "./model-tools.js";
 import { validateView, validateSection } from "./appearance.js";
 import { colorRGB } from "./geometry.js";
 import {
@@ -31,6 +36,10 @@ export function validateScene(input, limits) {
   )
     throw new Error("Invalid, empty or oversized scene manifest");
   const scene = { models: [] };
+  if (input.camera_bookmarks !== undefined)
+    scene.camera_bookmarks = validateBookmarks(input.camera_bookmarks);
+  if (input.display_units !== undefined)
+    scene.display_units = validateUnits(input.display_units);
   for (const key of ["center_models", "auto_rotate", "grid"]) {
     if (input[key] !== undefined) {
       if (typeof input[key] !== "boolean")
@@ -122,6 +131,16 @@ export function validateScene(input, limits) {
       m.animation_state = normalizePlaybackState(source.animation_state);
     }
     if (m.animation) createPlayback(m.animation, m, m.animation_state);
+    if (source.size_state !== undefined)
+      m.size_state = validateSizeState(source.size_state);
+    if (source.display_name !== undefined) {
+      if (
+        typeof source.display_name !== "string" ||
+        source.display_name.length > 1024
+      )
+        throw new Error("Invalid model name");
+      m.display_name = source.display_name;
+    }
     scene.models.push(m);
   }
   return scene;

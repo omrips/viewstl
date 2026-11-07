@@ -21,7 +21,11 @@ self.onmessage = async ({ data: { id, task } }) => {
         "view mode",
       );
       result = deriveGeometry(task.positions, task.features);
-    } else if (task.kind === "print-check")
+    } else if (task.kind === "measure")
+      result = (await import("./measure.js")).measure(task, (progress) =>
+        self.postMessage({ id, progress }),
+      );
+    else if (task.kind === "print-check")
       result = (await import("./print-check.js")).checkMesh(
         task.model,
         task.options,
