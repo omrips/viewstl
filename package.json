@@ -1,0 +1,90 @@
+{
+  "name": "@omrips/viewstl",
+  "version": "2.0.0-rc.5",
+  "description": "Local-first STL, OBJ, 3MF, STEP and IGES viewer with native WebGL2 and transferable worker geometry",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://www.viewstl.com/plugin/",
+  "bugs": "https://github.com/omrips/viewstl/issues",
+  "keywords": [
+    "viewstl",
+    "webgl2",
+    "3d-viewer",
+    "stl",
+    "obj",
+    "3mf",
+    "step",
+    "iges"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "next",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/omrips/viewstl.git"
+  },
+  "main": "./build/viewstl.cjs",
+  "module": "./build/viewstl.js",
+  "types": "./build/viewstl.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./build/viewstl.d.ts",
+        "default": "./build/viewstl.js"
+      },
+      "require": {
+        "types": "./build/viewstl.d.cts",
+        "default": "./build/viewstl.cjs"
+      }
+    },
+    "./node": {
+      "node": {
+        "import": {
+          "types": "./build/node/index.d.ts",
+          "default": "./build/node/index.js"
+        },
+        "require": {
+          "types": "./build/node/index.d.cts",
+          "default": "./build/node/index.cjs"
+        }
+      }
+    },
+    "./worker": "./build/viewstl.worker.js",
+    "./browser": "./build/stl_viewer.min.js",
+    "./assets/*": "./build/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "build",
+    "LICENSE",
+    "docs/v2-usage.md",
+    "docs/v2-compatibility.md",
+    "docs/v2-verification.md",
+    "docs/releases/2.0.0-rc.5.md",
+    "legacy/README.md",
+    "THIRD-PARTY-NOTICES.txt"
+  ],
+  "scripts": {
+    "build": "node scripts/build-v2.mjs",
+    "test": "node --test tests/v2/*.test.mjs",
+    "check:legacy": "node scripts/check-legacy.mjs",
+    "check:types": "tsc --noEmit --strict --module NodeNext --moduleResolution NodeNext --target ES2022 --lib ES2022,DOM tests/v2/types.ts",
+    "check:node-types": "tsc --noEmit --strict --module NodeNext --moduleResolution NodeNext --target ES2022 --lib ES2022 --types node tests/v2/node-types.mts tests/v2/node-types.cts",
+    "prepack": "node scripts/build-v2.mjs && node scripts/check-legacy.mjs",
+    "start": "node scripts/serve-v2.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "esbuild": "0.28.2",
+    "fflate": "0.8.3",
+    "occt-import-js": "0.0.23",
+    "prettier": "3.9.9",
+    "saxes": "6.0.0",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

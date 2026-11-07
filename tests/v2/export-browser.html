@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ViewSTL export verification</title>
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; img-src 'self' blob: data:"
+    />
+    <style>
+      body {
+        font: 16px system-ui;
+        margin: 24px;
+      }
+      #viewer {
+        width: 640px;
+        height: 360px;
+      }
+      pre {
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Plugin export verification</h1>
+    <button id="run">Run export checks</button>
+    <div id="viewer"></div>
+    <pre id="results">Not run.</pre>
+    <script type="module" src="export-browser.js"></script>
+  </body>
+</html>

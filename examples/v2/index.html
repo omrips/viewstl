@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>ViewSTL · Native viewer preview</title>
+    <link rel="stylesheet" href="demo.css" />
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="https://www.viewstl.com/">◈ ViewSTL</a
+      ><span class="badge">V2 · DEVELOPMENT PREVIEW</span
+      ><a href="animation.html">Animation demo ↗</a>
+      <a href="../../tests/v2/browser.html">Compatibility checks ↗</a>
+    </header>
+    <main>
+      <section class="intro">
+        <div>
+          <p class="eyebrow">YOUR MODEL, IN YOUR BROWSER</p>
+          <h1>Open. Rotate. Explore.</h1>
+          <p>
+            Drop an STL, OBJ or 3MF file into the viewer. Your files stay on
+            your device.
+          </p>
+        </div>
+        <button class="open" id="open" type="button">Open a model</button>
+        <input
+          id="file"
+          type="file"
+          accept=".stl,.obj,.3mf,.vsj,.vsb"
+          multiple
+          hidden
+        />
+      </section>
+      <section class="workspace">
+        <div class="viewport">
+          <div id="viewer"></div>
+          <div class="hint">
+            Drag to rotate <span>·</span> Shift + drag to pan
+            <span>·</span> Scroll to zoom
+          </div>
+        </div>
+        <aside>
+          <div class="panel-heading">
+            <h2>Model</h2>
+            <span id="count">0</span>
+          </div>
+          <select id="model" aria-label="Selected model"></select>
+          <dl id="info"></dl>
+          <label
+            >Surface<select id="display">
+              <option value="flat">Flat</option>
+              <option value="smooth" selected>Smooth</option>
+              <option value="wireframe">Wireframe</option>
+            </select></label
+          ><label>Color<input id="color" type="color" value="#568bdc" /></label
+          ><label
+            >Opacity<input
+              id="opacity"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value="1" /></label
+          ><label class="check"
+            ><input id="edges" type="checkbox" /> Show edges</label
+          ><label class="check"
+            ><input id="grid" type="checkbox" /> Show grid</label
+          ><label class="check"
+            ><input id="rotate" type="checkbox" /> Auto rotate</label
+          >
+          <div class="buttons">
+            <button id="fit">Fit to view</button
+            ><button id="image">Save image</button
+            ><button id="save">Save scene</button
+            ><button id="clear">Clear</button>
+          </div>
+          <button id="sample" class="sample">Load sample model</button>
+          <p id="status" role="status">Starting viewer…</p>
+        </aside>
+      </section>
+      <footer>
+        <span>Native WebGL2 · no Three.js required</span
+        ><span>STL / OBJ / 3MF / VSJ / VSB</span>
+      </footer>
+    </main>
+    <script type="module" src="demo.js"></script>
+  </body>
+</html>

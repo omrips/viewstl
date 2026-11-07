@@ -1,0 +1,121 @@
+{
+  "repository": "https://github.com/omrips/viewstl",
+  "commit": "fbb7f5c3894862778c3a6c5d2630573e2496d01f",
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 1063,
+      "sha256": "8882ff6770c174a53c79391383b5bb3433eff61a293ef3f9d36e337fb95e46cb"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1176,
+      "sha256": "81e3da8e05405fe953c866aa1d993490b70b4a1f7fd50c06f60d306a3b15d471"
+    },
+    {
+      "path": "build/CanvasRenderer.js",
+      "bytes": 27132,
+      "sha256": "2e1e1c36db2b5bab6dd9b4f3be9d9e3b23eda6d58cdd9c48c53439fa10c3540a"
+    },
+    {
+      "path": "build/OrbitControls.js",
+      "bytes": 15088,
+      "sha256": "7c441931e770a166ad6dc990486df2a16491e2794676b8d170a2d059ece18a7c"
+    },
+    {
+      "path": "build/Projector.js",
+      "bytes": 24158,
+      "sha256": "e34ea16635e614c0855db8c82e97976e9a1d323e6154d8f82bf6340a10ae686c"
+    },
+    {
+      "path": "build/TrackballControls.js",
+      "bytes": 14528,
+      "sha256": "31cdd098390cdf18b38bedbbe47c2f83f5facab314e361897a6486513711b523"
+    },
+    {
+      "path": "build/ie_polyfills.js",
+      "bytes": 2941,
+      "sha256": "e0c5366d7df0589ec7c29da3c4d412cf225de951cde3e25e8049dafbddf0c90d"
+    },
+    {
+      "path": "build/load_stl.min.js",
+      "bytes": 2985,
+      "sha256": "2e7b7be52b8038537fe5d51de3bfe3ba823e58b1985c845fe8b5d9cc969e3365"
+    },
+    {
+      "path": "build/parser.min.js",
+      "bytes": 9890,
+      "sha256": "3f12d562cba89173b9b318cbcfd607192b733d19057427d9804b0eb971739dd4"
+    },
+    {
+      "path": "build/stl_viewer.min.js",
+      "bytes": 37957,
+      "sha256": "9b0bc29ac8bfab1d62b48f225a9a61b1fdf4ac06a3cc4c4da9588a56aeeda76f"
+    },
+    {
+      "path": "build/three.min.js",
+      "bytes": 647210,
+      "sha256": "cd64cd84dfcc2d0a91c7f790451b1490e775998ecd21f6aae218b3cf253dfe03"
+    },
+    {
+      "path": "build/webgl_detector.js",
+      "bytes": 2447,
+      "sha256": "7907ca8aec2c62ead06401bbc30bec4c7d8eb1ce4c18cb47f190f128548f680f"
+    },
+    {
+      "path": "dependencies/CanvasRenderer.js",
+      "bytes": 27132,
+      "sha256": "2e1e1c36db2b5bab6dd9b4f3be9d9e3b23eda6d58cdd9c48c53439fa10c3540a"
+    },
+    {
+      "path": "dependencies/OrbitControls.js",
+      "bytes": 15088,
+      "sha256": "7c441931e770a166ad6dc990486df2a16491e2794676b8d170a2d059ece18a7c"
+    },
+    {
+      "path": "dependencies/Projector.js",
+      "bytes": 24158,
+      "sha256": "e34ea16635e614c0855db8c82e97976e9a1d323e6154d8f82bf6340a10ae686c"
+    },
+    {
+      "path": "dependencies/TrackballControls.js",
+      "bytes": 14528,
+      "sha256": "31cdd098390cdf18b38bedbbe47c2f83f5facab314e361897a6486513711b523"
+    },
+    {
+      "path": "dependencies/ie_polyfills.js",
+      "bytes": 2941,
+      "sha256": "e0c5366d7df0589ec7c29da3c4d412cf225de951cde3e25e8049dafbddf0c90d"
+    },
+    {
+      "path": "dependencies/three.min.js",
+      "bytes": 647210,
+      "sha256": "cd64cd84dfcc2d0a91c7f790451b1490e775998ecd21f6aae218b3cf253dfe03"
+    },
+    {
+      "path": "dependencies/webgl_detector.js",
+      "bytes": 2447,
+      "sha256": "7907ca8aec2c62ead06401bbc30bec4c7d8eb1ce4c18cb47f190f128548f680f"
+    },
+    {
+      "path": "src/ie_polyfills.js",
+      "bytes": 2941,
+      "sha256": "e0c5366d7df0589ec7c29da3c4d412cf225de951cde3e25e8049dafbddf0c90d"
+    },
+    {
+      "path": "src/load_stl.js",
+      "bytes": 5526,
+      "sha256": "35d9bb9fd50c6875f744030b02912a894cddc309887a1e4b814448661152b9d7"
+    },
+    {
+      "path": "src/parser.js",
+      "bytes": 28694,
+      "sha256": "c3a63657f22be35dfe085e91dd56c5a5849d8ae5d40e5f83d0429e0b807d44da"
+    },
+    {
+      "path": "src/stl_viewer.js",
+      "bytes": 74247,
+      "sha256": "60d3f63fcb424feccd813f2f275d4443b665323b28cf2e618246cf86d42b1d43"
+    }
+  ]
+}

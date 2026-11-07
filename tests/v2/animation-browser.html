@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; worker-src 'self'"
+    />
+    <title>ViewSTL animation verification</title>
+    <style>
+      body {
+        font: 15px system-ui;
+        background: #f5f7fb;
+        color: #25324a;
+        margin: 28px;
+      }
+      button {
+        padding: 10px;
+        margin: 4px;
+      }
+      #test-viewer {
+        width: 700px;
+        max-width: 95vw;
+        height: 390px;
+        background: white;
+        border: 1px solid #ccd3df;
+      }
+      pre {
+        white-space: pre-wrap;
+        line-height: 1.5;
+      }
+      img {
+        max-width: 220px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>ViewSTL animation verification</h1>
+    <p>Real WebGL 2 and workers. No device emulation.</p>
+    <button id="run">Run animation checks</button
+    ><button id="large">Run 1M triangle animation</button
+    ><button id="background">Arm background-tab check</button>
+    <div id="test-viewer"></div>
+    <pre id="results" role="status">Ready.</pre>
+    <pre id="performance"></pre>
+    <pre id="visibility"></pre>
+    <img id="png" alt="PNG of the captured animation pose" />
+    <script type="module" src="animation-browser.js"></script>
+  </body>
+</html>

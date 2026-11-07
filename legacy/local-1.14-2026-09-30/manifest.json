@@ -1,0 +1,80 @@
+{
+  "snapshot_date": "2026-09-30",
+  "description": "Local legacy checkout snapshot; unminified stl_viewer.js is marked 1.14. Files preserved as found, not rebuilt or certified as a matching release.",
+  "github_baseline": "fbb7f5c3894862778c3a6c5d2630573e2496d01f",
+  "missing_from_local_plugin_directory": [
+    "TrackballControls.js"
+  ],
+  "files": [
+    {
+      "path": "plugin/stl_viewer.js",
+      "bytes": 74703,
+      "sha256": "51a21c40b3621f94aec0607ccd388f95e51f128e798ca5c6a77dedce22e5a028"
+    },
+    {
+      "path": "plugin/stl_viewer.min.js",
+      "bytes": 37536,
+      "sha256": "a992ffd4d671b26cb9a012fa945d5c74000da62a17abcc70466dd48c064f1b24"
+    },
+    {
+      "path": "plugin/parser.js",
+      "bytes": 28643,
+      "sha256": "d8f6be4a10c7f17ea126e68d66dca3c158606f60d9780002705275559408e1f3"
+    },
+    {
+      "path": "plugin/parser.min.js",
+      "bytes": 5479,
+      "sha256": "ca2aa1dcb057e5ef3c48c4028a0aace7537be2b25351f28a2fb7ab3cb967576e"
+    },
+    {
+      "path": "plugin/load_stl.js",
+      "bytes": 5628,
+      "sha256": "15a1535fe74374271d92615e743ed7e86f0a0811fe859c0df1edd27576b889e5"
+    },
+    {
+      "path": "plugin/load_stl.min.js",
+      "bytes": 2855,
+      "sha256": "82e15417ff313b2c5e6cd60eff9d6c7bdb449dede99f05de79fb7ba0d63915b3"
+    },
+    {
+      "path": "plugin/ie_polyfills.js",
+      "bytes": 2941,
+      "sha256": "e0c5366d7df0589ec7c29da3c4d412cf225de951cde3e25e8049dafbddf0c90d"
+    },
+    {
+      "path": "plugin/three.min.js",
+      "bytes": 647210,
+      "sha256": "cd64cd84dfcc2d0a91c7f790451b1490e775998ecd21f6aae218b3cf253dfe03"
+    },
+    {
+      "path": "plugin/OrbitControls.js",
+      "bytes": 15088,
+      "sha256": "7c441931e770a166ad6dc990486df2a16491e2794676b8d170a2d059ece18a7c"
+    },
+    {
+      "path": "plugin/CanvasRenderer.js",
+      "bytes": 27132,
+      "sha256": "2e1e1c36db2b5bab6dd9b4f3be9d9e3b23eda6d58cdd9c48c53439fa10c3540a"
+    },
+    {
+      "path": "plugin/Projector.js",
+      "bytes": 24158,
+      "sha256": "e34ea16635e614c0855db8c82e97976e9a1d323e6154d8f82bf6340a10ae686c"
+    },
+    {
+      "path": "plugin/webgl_detector.js",
+      "bytes": 2447,
+      "sha256": "7907ca8aec2c62ead06401bbc30bec4c7d8eb1ce4c18cb47f190f128548f680f"
+    },
+    {
+      "path": "general/jszip.min.js",
+      "bytes": 95827,
+      "sha256": "832e56e7fad75a5b965c546f31614531586871fa417bb4dfe125b658c7e3b381"
+    },
+    {
+      "path": "general/jszip-utils.min.js",
+      "bytes": 1851,
+      "sha256": "e4686a0e93c1d5ba5196e0748664bb10990c1fe115caa50fd340af14492c4d5c"
+    }
+  ]
+}

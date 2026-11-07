@@ -1,41 +1,40 @@
 # Viewstl
-Javascript STL/OBJ 3D files Viewer
 
-Reads binary/ASCII STL files; OBJ files
+Javascript STL/OBJ/3MF/STEP/IGES 3D files Viewer
 
-Uses THREE.js lib - Can load THREE.js lib files in the background (no need to deal with THREE JS at all)
+**ViewSTL v2.00 — release candidate 2.0.0-rc.5.** A new native WebGL 2 implementation; no THREE.js runtime required. Reads local files on the user's device, with model exports, animation, VSB/VSJ scene saving and mesh checks.
 
-Usage:
-================
-At the html page header / page body:
-```
-<script src="stl_viewer.min.js"></script>
-```
+The new plugin is in `src/` and `build/`. Previous versions remain available in [legacy/](https://github.com/omrips/viewstl/tree/main/legacy), on the unchanged [master branch](https://github.com/omrips/viewstl/tree/master), and through their existing tags. v2 has [documented compatibility differences](docs/v2-usage.md#existing-api-and-intentional-differences).
 
-At the page body, create an element to contain the Stl Viewer, and give it an ID:
-```
-<div id="stl_cont"></div>
-```
+## Usage:
 
-Create a new instance of Stl Viewer (simplest initiation - read and view STL file called 'mystl.stl'):
-```
-var stl_viewer=new StlViewer(document.getElementById("stl_cont"), { models: [ {id:0, filename:"mystl.stl"} ] });
+Download the [v2 plugin ZIP](https://github.com/omrips/viewstl/releases/download/v2.0.0-rc.5/viewstl-2.0.0-rc.5.zip) and copy its complete `build/` folder to your website. Add to your page:
+
+```html
+<div id="stl_cont" style="height:500px"></div>
+<script src="build/viewstl.min.js"></script>
+<script>var stl_viewer=new StlViewer(document.getElementById("stl_cont"), {models:[{id:0, filename:"mystl.stl"}]});</script>
 ```
 
-Dependency on JSZip library:
-============================
-When dealing with 3mf/vsb files you must use JSZip library - https://stuk.github.io/jszip/
- - this library is not included here, you must upload it to your server and supply jszip_path and jszip_utils_path parameters:
-``` 
-var stl_viewer=new StlViewer
-(
-  document.getElementById("stl_cont"),
-  {
-      ....
-      jszip_path:"/<path_to_jszip>/jszip.min.js",
-      jszip_utils_path:"/<path_to_jszip>/jszip-utils.min.js"
-  }
-);
+Replace `mystl.stl` with your model and serve the page over HTTP(S). Keep the worker, `chunks/` and `cad/` folders alongside the viewer. Archive/CAD dependencies are included and load only when needed; v2 does not require a separate JSZip setup.
+
+## npm / Node.js:
+
+For this GitHub release, download the [package tarball](https://github.com/omrips/viewstl/releases/download/v2.0.0-rc.5/omrips-viewstl-2.0.0-rc.5.tgz), then:
+
+```sh
+npm install ./omrips-viewstl-2.0.0-rc.5.tgz
 ```
 
-more at https://www.viewstl.com/plugin/
+Browser apps can import `StlViewer` from `@omrips/viewstl`; see [worker setup](docs/v2-usage.md#es-modules-and-npm). Server-only analysis requires Node.js 20+:
+
+```js
+import { analyzeFile } from '@omrips/viewstl/node';
+console.log(await analyzeFile('part.stl', { units: 'mm' }));
+```
+
+The npm registry's existing `2.0.0-rc.4` package remains separate; this release is distributed on GitHub.
+
+More at [viewstl.com/plugin](https://www.viewstl.com/plugin/) (legacy documentation). For v2, see [usage and API notes](docs/v2-usage.md), [release notes](docs/releases/2.0.0-rc.5.md) and [verification](docs/v2-verification.md).
+
+The [original README and usage examples](https://github.com/omrips/viewstl/blob/main/legacy/v1/README.md) are preserved with the legacy plugin. ViewSTL uses the [MIT license](LICENSE); optional dependencies retain their [third-party notices](THIRD-PARTY-NOTICES.txt).

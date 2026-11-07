@@ -1,0 +1,1 @@
+function o(r,e,t="model"){if(e>(r.max_memory_bytes??Number.MAX_SAFE_INTEGER))throw new Error(`Estimated memory for this ${t} exceeds the device safety budget. Use a smaller model or a device with more memory.`)}function m(r,e){return 67108864+r*(224+(e.smooth?1536:0)+(e.edges||e.wire?2048:0))}export{o as a,m as b};
