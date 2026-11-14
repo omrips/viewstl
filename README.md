@@ -6,7 +6,7 @@ Javascript STL/OBJ/3MF/STEP/IGES 3D files Viewer
 
 The new plugin is in `src/` and `build/`. Previous versions remain available in [legacy/](https://github.com/omrips/viewstl/tree/main/legacy), on the unchanged [master branch](https://github.com/omrips/viewstl/tree/master), and through their existing tags. v2 has [documented compatibility differences](docs/v2-usage.md#existing-api-and-intentional-differences).
 
-The plugin contains model/scene operations; website controls and dialogs are separate. rc.8 app-helper users should read the [migration note](docs/v2-usage.md#viewer-sessions-and-custom-interfaces).
+The plugin contains model/scene operations; your page supplies its own controls and dialogs. Use `StlViewer` for a viewer, or [`ViewerSession`](docs/v2-usage.md#viewer-sessions-and-custom-interfaces) for queued loading and editing. rc.8 `mountViewstlApp` users should read the [migration note](docs/v2-usage.md#migrating-from-the-rc8-app-helper).
 
 ## Usage:
 

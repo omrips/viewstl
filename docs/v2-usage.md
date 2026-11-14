@@ -1,13 +1,14 @@
 # ViewSTL 2 — native WebGL2 plugin
 
-Version: `2.0.0-rc.5` (ViewSTL v2.00 release candidate, GitHub and npm).
+Version: `2.0.0-rc.9` (ViewSTL v2.00 release candidate, GitHub and npm).
 On `main`, the new plugin is in `src/` and `build/`; the legacy tree is in
 `legacy/v1/`. The unchanged `master` branch retains original legacy paths.
-The v2 website is available at https://preview.viewstl.com/.
+The v2 website is live at https://www.viewstl.com/; https://preview.viewstl.com/
+is its staging site. This guide documents the plugin, which you can host independently.
 
 ## Quick start
 
-Download the plugin ZIP from the [GitHub release](https://github.com/omrips/viewstl/releases/tag/v2.0.0-rc.5),
+Download the plugin ZIP from the [GitHub release](https://github.com/omrips/viewstl/releases/tag/v2.0.0-rc.9),
 then copy its complete `build/` folder to `/viewstl-v2/` on your website.
 Paste these three lines into your page's `<body>`:
 
@@ -130,7 +131,7 @@ HTTP(S) URLs and network-share paths are rejected. The module does not fetch
 external model resources, run a web service, or write input files to disk.
 An application's own upload handler determines how files reach its server and
 whether they are stored. Browser-selected files sent to a server are uploads;
-the preview website continues to perform its checks on the user's device.
+the ViewSTL website continues to perform its checks on the user's device.
 
 STL and OBJ carry no reliable physical units. Supply `units: 'mm'`, `'cm'`, `'m'`,
 `'in'`, `'ft'` or `'um'` when the input scale is known. With no scale, `units` and
@@ -204,26 +205,65 @@ does not provide an HTTP endpoint, authentication or a filesystem sandbox.
 ## Viewer sessions and custom interfaces
 
 Use `StlViewer` directly for a viewer, or `ViewerSession` for a reusable loading
-queue and model editing. Neither requires the ViewSTL website's controls, labels
-or dialogs. Each session belongs to one container and starts its canvas/workers
-only when loading begins (or when you explicitly call `ready()`).
+queue, scene imports and model editing. Neither requires the ViewSTL website's
+HTML IDs, controls, labels or dialogs. For a hosted interface without maintaining
+your own controls, use the website's [iframe builder](https://www.viewstl.com/embed/).
+
+Each session belongs to one container and initializes the viewer only when loading
+begins (or when you explicitly call `ready()`). The plugin owns file parsing,
+memory admission, cancellation, transforms, camera, saving, animation and analysis.
+Your page owns buttons, panels, messages, selection policy and keyboard shortcuts.
+
+Copy the complete `build/` directory to `/viewstl-v2/`, then serve this page over
+HTTP(S). The same class is available as `import { ViewerSession } from 'viewstl'`
+in a bundled app (set `viewer_options.worker_url` as in the npm setup above),
+or as global `ViewerSession` after the classic `viewstl.min.js` script.
+
+```html
+<input id="files" type="file" multiple accept=".stl,.obj,.3mf,.step,.stp,.iges,.igs,.vsb,.vsj">
+<button id="save" disabled>Save scene</button>
+<p id="status" role="status"></p>
+<div id="viewer" style="height:500px"></div>
+<script type="module">
+  import { ViewerSession } from '/viewstl-v2/viewstl.js';
+  const input = document.getElementById('files');
+  const save = document.getElementById('save');
+  const status = document.getElementById('status');
+  const session = new ViewerSession(document.getElementById('viewer'), {
+    device_memory: navigator.deviceMemory,
+    on_event(event) {
+      if (event.type === 'error') status.textContent = event.message;
+      if (event.type === 'busy') save.disabled = event.busy || !session.getModels().length;
+    }
+  });
+  input.addEventListener('change', async () => {
+    status.textContent = '';
+    try { await session.openFiles(input.files); }
+    catch (error) { status.textContent = error.message; }
+    finally { input.value = ''; }
+  });
+  save.addEventListener('click', async () => {
+    try { await session.viewer.download_scene({format: 'vsb', filename: 'scene'}); }
+    catch (error) { status.textContent = error.message; }
+  });
+  // In a single-page app, call session.dispose() when this component unmounts.
+</script>
+```
+
+For a strict Content Security Policy, put the module in a separate `.js` file
+and reference it with `<script type="module" src="...">`.
+
+After loading, use detached metadata to choose a model. Session rotations are
+**degrees**; the original `StlViewer` rotation and animation APIs use **radians**.
 
 ```js
-import { ViewerSession } from './viewer/viewstl.js';
-const session = new ViewerSession(document.getElementById('viewer'), {
-  device_memory: navigator.deviceMemory,
-  viewer_options: { worker_url: '/viewer/viewstl.worker.js' },
-  on_event(event) {
-    if (event.type === 'error') console.error(event.code, event.message);
-    if (event.type === 'progress') console.log(event.progress);
-  }
-});
-await session.openFiles(fileInput.files);
-const models = session.getModels(); // detached metadata; no mesh copies
-if (models.length) session.setRotation(models[0].id, {x: 0, y: 0, z: 90});
-// Existing export/analysis/camera APIs stay on StlViewer:
-await session.viewer.download_scene({format: 'vsb'});
-session.dispose();
+const model = session.getModels()[0];
+if (model) {
+  session.setRotation(model.id, {x: 0, y: 0, z: 90});
+  const viewer = await session.ready();
+  viewer.set_camera_view('isometric');
+  await viewer.download_model(model.id, {format: 'stl'});
+}
 ```
 
 The host supplies any file input, toolbar and status display. `viewer_options`
@@ -251,13 +291,103 @@ fallback. This is a limit estimate, not a free-memory measurement.
 | `dispose()` | Cancel work and release manipulation listeners, workers and viewer resources. Idempotent; later operations reject. |
 
 Read-only `busy`, `arrangement`, `grid` and `memoryPolicy` expose current settings.
-Events are `ready`, `busy`, `opening`, `progress`, `loaded`, `scene-loaded`,
-`load-failed`, `error` and `animation`; their shapes are in the public types.
+`memoryPolicy` contains byte-valued `budget`, `estimated`, the `reported` flag and
+the applied `limits`. `getModel()` returns null for unknown IDs. Snapshots contain
+names, bounds, units, transforms, original transform/color baselines and animation
+state/definition, without copying mesh buffers. Changing a snapshot has no effect;
+use the methods to edit the model.
+
 Queue promises settle after work drains, including per-file failures reported
 through events. Inspect the resulting models/events rather than treating promise
 resolution alone as proof every file succeeded. Invalid URL arguments throw.
 
-**Migration from rc.8:** `mountViewstlApp` and its `ViewstlApp*` types are no longer
+Keep model membership synchronized: use session loading/removal/duplication/clear
+methods instead of `viewer.add_model`, `viewer.import_scene`, `viewer.remove_model`
+or `viewer.clean`. Use `session.viewer` for appearance, resizing, camera, exporting
+and analysis. This property is null before initialization; `await session.ready()`
+returns a usable viewer. `clear()` keeps it reusable; `dispose()` releases it permanently.
+
+## Session events and loading
+
+Supply one `on_event` callback in the constructor. It receives the following
+objects; this is not a DOM `addEventListener` API. Existing `viewer_options`
+callbacks are still called.
+
+| `event.type` | Additional fields | Meaning |
+| --- | --- | --- |
+| `ready` | none | Viewer initialized, not necessarily a model loaded. |
+| `busy` | `busy: boolean` | Loading queue starts or finishes. |
+| `opening` | `name` | Beginning an input file. |
+| `progress` | `scene`, `progress: {phase?, loaded?, total?}` | Loading/parsing progress; byte totals can be absent or zero. |
+| `loaded` | `name`, `id` | One model was added successfully. |
+| `scene-loaded` | `name`, `ids` | An entire incoming scene was added successfully. |
+| `load-failed` | `name` | An input failed; see `error` for details. |
+| `error` | `code`, `message`, optional `source` | Loading/initialization error to present in your UI. |
+| `animation` | `id`, `state`, `reason` | Model playback changed; see animation callbacks. |
+
+Local model files, VSB scenes and VSJ scenes use `openFiles()`. Include a local
+VSJ's companion files in the same selection. A VSB is self-contained. The session
+does not install page-wide drop handlers: your UI chooses where dropping is allowed.
+
+```js
+// Add after constructing session; remove these listeners when unmounting your UI.
+const dropZone = document.getElementById('viewer');
+dropZone.addEventListener('dragover', event => event.preventDefault());
+dropZone.addEventListener('drop', async event => {
+  event.preventDefault();
+  try { await session.openFiles(event.dataTransfer.files); }
+  catch (error) { console.error(error); }
+});
+```
+
+`openURL()` uses the configured same-origin `viewer_options.url_import_endpoint`;
+see [URL imports](#optional-streaming-url-imports). The relay is your server's
+responsibility and is not included in the plugin. Local files do not use it.
+`openFiles([{name, url, size?}])` can also load named browser URLs, subject to the
+normal loading/CORS rules. Call `cancelLoading()` to stop pending/active loads
+while retaining previously loaded models. A cancelled/failed staged scene does
+not append a partially loaded scene.
+
+## Model manipulation with your own controls
+
+After initialization, `bindManipulation()` binds canvas gestures for move,
+rotate and depth. It creates no toolbar or popup. Your UI chooses the selected
+model and tool, enables the binding and decides when camera navigation is disabled.
+
+```js
+const viewer = await session.ready();
+let selectedId = session.getModels()[0]?.id ?? null;
+let tool = 'move'; // Your controls can also choose 'rotate' or 'depth'.
+const binding = session.bindManipulation({
+  getModelId: () => selectedId,
+  getTool: () => tool,
+  onChange: id => console.log(session.getModel(id)?.position)
+});
+function setEditing(enabled) {
+  const active = enabled && selectedId !== null;
+  binding.setEnabled(active);
+  viewer.controls.enabled = !active;
+  viewer.set_selection(active ? selectedId : null);
+}
+setEditing(true);
+// Call setEditing(false) from your Done button, then binding.dispose() on unmount.
+```
+
+Bindings start disabled. `getModelId(event?)` may inspect a pointer event; the
+event is absent for wheel input, and returning null ignores input. Optional
+`onStart(id)` and `onEnd(id, cancelled)` support UI feedback. Session disposal
+also disposes its bindings. `prepareManual(id)` stops that model's animation at
+its current pose; `centerPivot(id)` also rebases its pivot without moving vertices.
+Manual position/rotation/depth operations prepare the model automatically.
+`moveDepth(id, amount)` moves away from the camera for positive values and nearer
+for negative values. `duplicate(id)` returns a new ID and starts a copied animation
+paused. `setArrangement('original')` restores saved baseline placement/rotation;
+`'side-by-side'` arranges for comparison; both stop animation and fit the view.
+`'custom'` retains the current poses. Model source geometry is unchanged.
+
+## Migrating from the rc.8 app helper
+
+`mountViewstlApp` and its `ViewstlApp*` types are no longer
 exported. That helper depended on ViewSTL-specific HTML IDs and UI policy. Use
 `ViewerSession` or `StlViewer` with your own UI, or retain your pinned rc.8 build
 while migrating. Existing published releases and legacy v1 remain available.
@@ -321,7 +451,7 @@ so a 3MF triangle's per-vertex gradient cannot survive STL/VSB export exactly.
 
 ## Model animation
 
-Animation is included in `2.0.0-rc.5` on GitHub and in both npm packages.
+Animation is included in the current release on GitHub and in both npm packages.
 Playback remains inside the native WebGL2 plugin.
 
 After a model has loaded, one call starts continuous rotation:
@@ -502,7 +632,7 @@ normals/edge maps can use substantially more memory than flat rendering.
 archive expansion, expanded 3MF instances, and derived smooth/wire/edge maps.
 It estimates working memory, including GPU buffers; it does not measure free
 memory. Existing default byte/triangle limits remain unchanged for embedders.
-The ViewSTL preview site configures its own device-dependent limits: half the
+The ViewSTL website uses the session's device-dependent limits: half the
 approximate `navigator.deviceMemory` report, or half a 2 GiB fallback if absent.
 This leaves a 50% margin against that estimate, not a guaranteed allocation or
 protection against an OS/browser killing an exhausted tab.
@@ -714,7 +844,7 @@ the production site. Automated and desktop browser results are recorded in
 
 Use `center_models: false` to preserve the coordinates in assembly files, then call
 `add_model` / `add_models` to append files. `set_position` changes presentation
-coordinates without rewriting source geometry. The preview site's Models panel
+coordinates without rewriting source geometry. The website's Models panel
 adds selection, individual removal and reversible side-by-side placement.
 
 ```js
@@ -751,7 +881,7 @@ surface, or `null` for empty space. Coordinates use the same viewport coordinate
 system as mouse events. It respects transforms, hidden models and section cuts.
 The host chooses when to pick: for example, on double-click or at the start of a selection drag. The existing legacy click callbacks retain their behavior.
 
-The preview provides Move, Rotate and Depth controls per model. Rotation uses
+The website provides Move, Rotate and Depth controls per model. Rotation uses
 degrees in the UI and compensates for the original mesh center; the plugin's
 `set_rotation` API continues to accept radians with its existing origin behavior.
 Depth translates along the eye-to-model ray while holding the camera fixed.
@@ -788,14 +918,14 @@ vertex color of each triangle. Texture/UV data and original CAD topology/history
 are not reconstructed or included.
 
 VSJ is JSON settings and model references, without embedded geometry. The
-`force_basename` option defaults to false for API callers; the preview uses true
+`force_basename` option defaults to false for API callers; the website uses true
 to write only filenames. Referenced files must be supplied separately. A local-file
 reference alone does not grant browser access to a file on disk. VSB is the
-self-contained choice. The preview opens both formats through the file picker,
+self-contained choice. The website opens both formats through the file picker,
 drag and drop, and URL opening. Existing `get_vsj`, `get_vsb`, `get_vsb_blob` and their legacy
 download methods retain their signatures and behavior.
 
-In the app Save dialog, VSB/VSJ save the entire scene. STL/OBJ/3MF/STEP/IGES save
+In the website's Save dialog, VSB/VSJ save the entire scene. STL/OBJ/3MF/STEP/IGES save
 only the selected model. There is no user-selectable scope dropdown. The low-level
 `export_models` API still permits explicit multiple-model selections for embedders.
 
@@ -830,19 +960,20 @@ scene with many remote references can hit the relay's rate limit.
 Imports append models with new IDs and restore camera, background/grid, transforms,
 colors/opacity, view modes, smoothing and sections. Saved centering is converted
 to equivalent model positions without changing existing models' centering. Embed
-canvas size and resize/mouse controls are not imported. The development animation
-update also restores per-model animation and preserves its original pivot.
+canvas size and resize/mouse controls are not imported. Scene loading also
+restores per-model animation and preserves its original pivot.
 Scene reading and mesh parsing use workers and the existing memory/triangle/archive
 limits. Models become visible together after all have loaded. Errors, cancellation,
 or a throwing progress callback remove the incoming models and retain the existing
 scene. `clean()` and `dispose()` also cancel pending scene imports. Existing
 `load_vsj` and `load_vsb` retain their previous signatures and behavior.
 
-In the preview, choose or drop a local VSJ together with its referenced model files;
+On the website, choose or drop a local VSJ together with its referenced model files;
 companions used by the scene are not added twice. A VSB needs no separate files.
 Choose VSB/VSJ explicitly in Open URL for a URL without a scene extension. Scene
-opening, progress, cancellation and restored editing controls all live in the
-plugin's app controller; the website initializer remains minimal.
+opening, progress events, cancellation and restored model state belong to the
+plugin's `ViewerSession`. The website owns the picker, drop targets, progress
+display and editing controls; these are not distributed in the plugin.
 
 ## Checking meshes for 3D printing
 

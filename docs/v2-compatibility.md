@@ -1,6 +1,6 @@
 # Native WebGL2 plugin: compatibility requirements
 
-Status: v2 implemented; release candidate `2.0.0-rc.5`. This document records the requirements, updated for the approved main-branch layout;
+Status: v2 implemented; release candidate `2.0.0-rc.9`. This document records the requirements, updated for the approved main-branch layout;
 see [usage and intentional differences](v2-usage.md) for the implemented
 contract and [verification](v2-verification.md) for actual test coverage.
 
@@ -22,7 +22,16 @@ var viewer = new StlViewer(container, {
 - Keep new artifacts under `build/`.
 - Maintain classic script-tag usage and the global `StlViewer` entry point.
   An ES module entry point can be provided additionally.
-- Existing production site, DNS and hosting remain outside this preparation.
+- The production website uses v2. Its UI and server services are maintained
+  separately; the plugin repository/package contains the model engine and API.
+
+`StlViewer` remains the direct viewer API. `ViewerSession` adds queued loading,
+scene imports and editing for a host's own interface; neither requires ViewSTL
+page markup. rc.9 removes the website-specific `mountViewstlApp` helper and its
+types, introduced in earlier v2 candidates. See the
+[rc.8 migration guide](v2-usage.md#migrating-from-the-rc8-app-helper).
+Existing published candidates and the v1 archive are retained. This does not
+change ordinary `StlViewer` integrations into website integrations.
 
 WebGL2 is the rendering minimum. The rewrite will not include the legacy
 CanvasRenderer software fallback, WebGL1 fallback, or Internet Explorer
