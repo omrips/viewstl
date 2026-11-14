@@ -1,5 +1,8 @@
 # Preview-site animation integration plan
 
+> Historical first-integration plan. Since rc.9, website controls live in the
+> separate website project; plugin/session APIs own the model operations.
+
 Status: implemented, 2026-11-02. This document records the approved scope.
 The controller, static site controls and tests are implemented; deployment
 evidence is recorded in the site's infrastructure/SERVER.md.

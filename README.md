@@ -2,13 +2,15 @@
 
 Javascript STL/OBJ/3MF/STEP/IGES 3D files Viewer
 
-**ViewSTL v2.00 — release candidate 2.0.0-rc.8.** A new native WebGL 2 implementation; no THREE.js runtime required. Reads local files on the user's device, with resizing, units, duplication, camera bookmarks, model exports, animation, VSB/VSJ scene saving and mesh checks.
+**ViewSTL v2.00 — release candidate 2.0.0-rc.9.** A new native WebGL 2 implementation; no THREE.js runtime required. Reads local files on the user's device, with resizing, units, duplication, camera bookmarks, model exports, animation, VSB/VSJ scene saving and mesh checks.
 
 The new plugin is in `src/` and `build/`. Previous versions remain available in [legacy/](https://github.com/omrips/viewstl/tree/main/legacy), on the unchanged [master branch](https://github.com/omrips/viewstl/tree/master), and through their existing tags. v2 has [documented compatibility differences](docs/v2-usage.md#existing-api-and-intentional-differences).
 
+The plugin contains model/scene operations; website controls and dialogs are separate. rc.8 app-helper users should read the [migration note](docs/v2-usage.md#viewer-sessions-and-custom-interfaces).
+
 ## Usage:
 
-Download the [v2 plugin ZIP](https://github.com/omrips/viewstl/releases/download/v2.0.0-rc.8/viewstl-2.0.0-rc.8.zip) and copy its complete `build/` folder to your website. Add to your page:
+Download the [v2 plugin ZIP](https://github.com/omrips/viewstl/releases/download/v2.0.0-rc.9/viewstl-2.0.0-rc.9.zip) and copy its complete `build/` folder to your website. Add to your page:
 
 ```html
 <div id="stl_cont" style="height:500px"></div>
@@ -33,6 +35,6 @@ console.log(await analyzeFile('part.stl', { units: 'mm' }));
 
 No version suffix is needed. `npm install @omrips/viewstl` also installs the current release; existing scoped imports remain supported. Both names contain the same plugin, including animation and VSB/VSJ scene persistence.
 
-More at [viewstl.com/plugin](https://www.viewstl.com/plugin/). For v2, see [usage and API notes](docs/v2-usage.md), [release notes](docs/releases/2.0.0-rc.8.md) and [verification](docs/v2-verification.md).
+More at [viewstl.com/plugin](https://www.viewstl.com/plugin/). For v2, see [usage and API notes](docs/v2-usage.md), [release notes](docs/releases/2.0.0-rc.9.md) and [verification](docs/v2-verification.md).
 
 The [original README and usage examples](https://github.com/omrips/viewstl/blob/main/legacy/v1/README.md) are preserved with the legacy plugin. ViewSTL uses the [MIT license](LICENSE); optional dependencies retain their [third-party notices](THIRD-PARTY-NOTICES.txt).

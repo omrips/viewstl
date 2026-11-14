@@ -1,6 +1,6 @@
 import StlViewer, {
-  mountViewstlApp,
-  type ViewstlAppState,
+  ViewerSession,
+  type SessionModel,
   type ModelInfo,
   type Scene,
   type ViewerOptions,
@@ -78,23 +78,44 @@ void viewer.download_scene({
 });
 void exported.then((result) => console.log(result.blob, result.representation));
 console.log(info, scene, text);
-const app = mountViewstlApp(document, { sample_url: "/sample.stl" });
-const state: ViewstlAppState = app.getState();
-void app.openFiles([new File([], "test.stl")]);
-app.select(0);
-app.cancelLoading();
-app.clear();
-app.remove(0);
-app.dispose();
+const session = new ViewerSession(document.createElement("div"), {
+  on_event(event) {
+    if (event.type === "error") console.log(event.code, event.message);
+  },
+});
+const state: SessionModel[] = session.getModels();
+void session.openFiles([new File([], "test.stl")]);
+void session.openURL("https://example.com/scene.vsb", "vsb");
+session.setPosition(0, { x: 1, y: 2, z: 3 });
+session.setRotation(0, { x: 0, y: 0, z: 90 });
+session.setArrangement("side-by-side");
+session
+  .bindManipulation({ getModelId: () => 0, getTool: () => "move" })
+  .dispose();
+session.cancelLoading();
+session.clear();
+session.remove(0);
+session.dispose();
 console.log(state, info?.bounds, info?.has_colors, info?.source_units);
 viewer.resize_model(0, [2, 2, 2]);
-viewer.set_file_units(0, 'inch');
+viewer.set_file_units(0, "inch");
 viewer.reset_model_size(0);
 const modelSize = viewer.get_model_size(0);
 const copyId: number = viewer.duplicate_model(0);
-viewer.set_display_units('mm');
-viewer.set_camera_view('isometric');
-viewer.set_camera_bookmarks([{name: 'Detail', camera: viewer.get_camera_state()}]);
+viewer.set_display_units("mm");
+viewer.set_camera_view("isometric");
+viewer.set_camera_bookmarks([
+  { name: "Detail", camera: viewer.get_camera_state() },
+]);
 const bookmarks = viewer.get_camera_bookmarks();
-void viewer.measure_model(copyId, {signal: exportAbort.signal, on_progress: p => console.log(p.phase)}).then(result => console.log(result.area_mm2, result.volume_mm3));
-console.log(modelSize, bookmarks, viewer.get_model_info(0, {measurements:false}));
+void viewer
+  .measure_model(copyId, {
+    signal: exportAbort.signal,
+    on_progress: (p) => console.log(p.phase),
+  })
+  .then((result) => console.log(result.area_mm2, result.volume_mm3));
+console.log(
+  modelSize,
+  bookmarks,
+  viewer.get_model_info(0, { measurements: false }),
+);

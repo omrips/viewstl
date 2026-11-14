@@ -1,4 +1,4 @@
-import { mountViewstlApp } from "./app.js";
+import { ViewerSession } from "./session.js";
 import { StlViewer } from "./viewer.js";
 const script = globalThis.document?.currentScript;
 StlViewer.workerURL = new URL(
@@ -7,4 +7,4 @@ StlViewer.workerURL = new URL(
 ).href;
 globalThis.StlViewer = StlViewer;
 
-globalThis.mountViewstlApp = mountViewstlApp;
+globalThis.ViewerSession = ViewerSession;

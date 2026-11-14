@@ -4,12 +4,8 @@ import { StlViewer } from "../../src/viewer.js";
 import {
   syncAnimatedRecord,
   centerAnimationPivot,
-  spinDefinition,
-} from "../../src/app-animation.js";
-import {
-  enginePosition,
-  rotationMatrix,
-} from "../../src/model-transform.js";
+} from "../../src/model-state.js";
+import { enginePosition, rotationMatrix } from "../../src/model-transform.js";
 const axes = ["x", "y", "z"];
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-8, `${a} != ${b}`);
 function model() {
@@ -41,7 +37,7 @@ function point(m, v) {
       ),
   );
 }
-test("app record round trip preserves offset, rotated, nonuniformly scaled models", () => {
+test("model transform round trip preserves offset, rotated, nonuniformly scaled models", () => {
   const m = model(),
     record = {};
   syncAnimatedRecord(record, m);
@@ -79,15 +75,6 @@ test("spin pivot rebasing preserves every world vertex and reset center; repeat 
   centerAnimationPivot(record, m);
   assert.equal(JSON.stringify([record, m]), snapshot);
   assert.equal(m.geometry, g);
-});
-test("spin settings are bounded and invalid settings cannot generate a replacement", () => {
-  assert.deepEqual(spinDefinition("x", 5, "-1"), {
-    delta: { rotationx: -2 * Math.PI, msec: 5000, loop: true },
-  });
-  for (const seconds of [0, -1, NaN, Infinity, 3601])
-    assert.throws(() => spinDefinition("z", seconds, "1"));
-  assert.throws(() => spinDefinition("bad", 5, "1"));
-  assert.throws(() => spinDefinition("z", 5, "0"));
 });
 
 test("stopped off-center spin saves an equivalent VSJ pose using the original mesh", () => {

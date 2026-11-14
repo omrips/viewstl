@@ -69,7 +69,6 @@ export function bindModelMove(
       if (current.tool === "rotate") onRotate?.(current.id, current.rotation);
       else onMove(current.id, current.position);
     }
-    canvas.classList.remove("moving-model");
     if (canvas.hasPointerCapture(current.pointer))
       canvas.releasePointerCapture(current.pointer);
     onEnd?.(current.id, cancel);
@@ -107,7 +106,6 @@ export function bindModelMove(
     };
     onStart?.(model.id);
     canvas.setPointerCapture(e.pointerId);
-    canvas.classList.add("moving-model");
     canvas.focus({ preventScroll: true });
   });
   on("pointermove", (e) => {
@@ -177,7 +175,6 @@ export function bindModelMove(
       end(true);
       blocked.clear();
       enabled = value;
-      canvas.classList.toggle("model-move-ready", value);
     },
     dispose() {
       end(true);

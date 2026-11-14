@@ -1,2 +1,2 @@
 export { StlViewer, default } from "./viewer.js";
-export { mountViewstlApp } from "./app.js";
+export { ViewerSession } from "./session.js";

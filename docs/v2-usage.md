@@ -201,73 +201,68 @@ covered by the JS-heap limit. Size host/container limits for total concurrency;
 use process/container isolation when serving untrusted uploads. The library
 does not provide an HTTP endpoint, authentication or a filesystem sandbox.
 
-## Full app controls
+## Viewer sessions and custom interfaces
 
-`mountViewstlApp` is the optional app controller, exported from the same
-`viewstl.js` bundle as `StlViewer` (and as a global in the classic script).
-It owns the file queue, memory admission, cancellation, selection, scene
-placement, translation/rotation/depth gestures, viewing modes, sectioning,
-colors, grid, PNG downloads, keyboard handling, and control state.
+Use `StlViewer` directly for a viewer, or `ViewerSession` for a reusable loading
+queue and model editing. Neither requires the ViewSTL website's controls, labels
+or dialogs. Each session belongs to one container and starts its canvas/workers
+only when loading begins (or when you explicitly call `ready()`).
 
 ```js
-import { mountViewstlApp } from './viewer/viewstl.js';
-const app = mountViewstlApp(document, {
-  sample_url: new URL('./sample-vase.stl', import.meta.url).href,
-  sample_name: 'Twist vase.stl'
+import { ViewerSession } from './viewer/viewstl.js';
+const session = new ViewerSession(document.getElementById('viewer'), {
+  device_memory: navigator.deviceMemory,
+  viewer_options: { worker_url: '/viewer/viewstl.worker.js' },
+  on_event(event) {
+    if (event.type === 'error') console.error(event.code, event.message);
+    if (event.type === 'progress') console.log(event.progress);
+  }
 });
-await app.openFiles(fileInput.files);
-console.log(app.getState()); // detached metadata snapshot, no geometry copies
-app.dispose(); // cancels work and releases listeners, workers and WebGL
+await session.openFiles(fileInput.files);
+const models = session.getModels(); // detached metadata; no mesh copies
+if (models.length) session.setRotation(models[0].id, {x: 0, y: 0, z: 90});
+// Existing export/analysis/camera APIs stay on StlViewer:
+await session.viewer.download_scene({format: 'vsb'});
+session.dispose();
 ```
 
-This controller binds the preview's HTML control layout; the host supplies
-markup and CSS. The reference layout is `Viewstl/site/index.html` in the sibling
-website workspace. `requiredControls` in `src/app.js` validates the control
-IDs before registering handlers. Missing controls and duplicate mounts produce
-a descriptive error. Custom integrations without that layout use `StlViewer`.
-Branding, page metadata, advertisements and static help/privacy text belong
-to the host page. The preview's JavaScript is only the initialization call.
+The host supplies any file input, toolbar and status display. `viewer_options`
+accepts existing constructor options except `models` and `allow_drag_and_drop`;
+pass initial/dropped files to the session loading methods so it tracks imported models. Existing viewer callbacks are
+composed with session notifications. Optional `colors` supplies fallback colors
+for files without their own colors. Without an override the memory policy uses
+half the browser's supplied device-memory estimate, or half a conservative 2 GiB
+fallback. This is a limit estimate, not a free-memory measurement.
 
-For an embedded app, pass an `HTMLElement` containing the layout. Queries,
-keyboard events and drops are scoped to that root. For multiple roots, prefix
-each layout's IDs and label/ARIA references and pass the matching `id_prefix`;
-the controller separates radio groups as well. `dispose()` permits remounting
-and prevents late reads from updating the new app.
+| Session API | Contract |
+| --- | --- |
+| `ready()`, `viewer` | Explicitly initialize and await the viewer; the property is null before initialization. |
+| `openFiles(files)` | Queue Files or configured {name, url, size?} sources. VSB/VSJ imports and VSJ companions use the same path. |
+| `openURL(url, format?)` | Queue a remote model/scene through the explicitly configured same-origin relay. |
+| `cancelLoading()` | Cancel queued/active loading, retaining existing models. |
+| `getModel(id)`, `getModels()` | Detached metadata including name, bounds, transforms, reset baselines and animation definition/state; no private geometry buffers. |
+| `setPosition(id, xyz)`, `setRotation(id, degrees)` | Edit center-preserving transforms; return false for invalid input. Stop only the edited model's animation. Original StlViewer methods continue to use radians. |
+| `prepareManual(id)`, `centerPivot(id)` | Capture/stop current playback; optionally rebase the pivot without moving any rendered vertex. |
+| `moveDepth(id, amount)` | Translate along the eye-to-model ray. Positive moves away, negative moves nearer. |
+| `setArrangement(mode)` | original, side-by-side or custom; keep source geometry unchanged. |
+| `setGrid(enabled, spacing?, height?)` | Configure the infinite XY grid. |
+| `duplicate(id)`, `remove(id)`, `clear()` | Manage session models through these methods to retain session metadata/reset baselines. |
+| `bindManipulation(options)` | After ready, bind move/rotate/depth canvas gestures; options supply getModelId(event?), getTool(), onChange/onStart/onEnd. Returns setEnabled/dispose. No toolbar or styles are created. |
+| `dispose()` | Cancel work and release manipulation listeners, workers and viewer resources. Idempotent; later operations reject. |
 
-Optional shortcut buttons can reuse the app actions without extra host-side
-JavaScript. Use `data-open-file` for Open, and `data-viewstl-shortcut` with `save`,
-`select`, `front`, `right`, `top`, `back`, `left`, `bottom` or `isometric` for the
-other actions. Save requires the normal save-dialog control group. These
-buttons do not add required control IDs, so existing app layouts remain valid.
-Use real buttons with descriptive labels/tooltips. The host supplies responsive
-CSS; the ViewSTL website shows its shortcut row only on wide desktop screens.
+Read-only `busy`, `arrangement`, `grid` and `memoryPolicy` expose current settings.
+Events are `ready`, `busy`, `opening`, `progress`, `loaded`, `scene-loaded`,
+`load-failed`, `error` and `animation`; their shapes are in the public types.
+Queue promises settle after work drains, including per-file failures reported
+through events. Inspect the resulting models/events rather than treating promise
+resolution alone as proof every file succeeded. Invalid URL arguments throw.
 
-`select` toggles model selection/editing and reflects it through `aria-pressed`.
-It opens the compact Move/Rotate/Depth box immediately, starting with Move.
-Camera gestures pause; a click selects a model, and dragging a model selects
-and manipulates it with the current tool. Empty-canvas drags do nothing.
-Changing the tool or selected model keeps the compact box open. Turning Select
-off, Done, Escape or a camera shortcut hides it and restores camera controls.
-A viewport resize also exits when all selection shortcuts become hidden.
-This is temporary interaction state, not a saved scene property. The existing
-double-click and Models-list selection mechanisms remain available.
-
-`openFiles()` accepts Files or configured `{name, url, size?}` sources and
-resolves when the queue settles. File errors appear in the notice; success is
-reflected by `getState().models`. Other methods are `select(id)`, `remove(id)`,
-`cancelLoading()` and `clear()`. An omitted `sample_url` hides the sample action.
-`worker_url`, `worker_factory` and `worker_timeout` support alternate hosting,
-bundlers and CommonJS use.
-
-Loading the bundle does not create a canvas or worker. The first file creates
-the WebGL2 viewer. App source modules are bundled into `viewstl.js`; the host
-ships no separate memory/layout/transform helpers. Worker JS, archive chunks
-and CAD WASM remain separate plugin-owned assets to keep parsing off the main
-thread and avoid downloading CAD code for STL/OBJ users.
-
-`get_model_info()` also exposes copied source `bounds`, `has_colors`, and
-`source_units` (`null` for unitless sources), so consumers need not inspect
-internal geometry or retain its buffers.
+**Migration from rc.8:** `mountViewstlApp` and its `ViewstlApp*` types are no longer
+exported. That helper depended on ViewSTL-specific HTML IDs and UI policy. Use
+`ViewerSession` or `StlViewer` with your own UI, or retain your pinned rc.8 build
+while migrating. Existing published releases and legacy v1 remain available.
+The ViewSTL website's controller is maintained separately, not distributed in
+the plugin repository or npm package. Ordinary `StlViewer` integrations keep their API.
 
 ## Rendering and file processing
 
@@ -407,25 +402,12 @@ while the affected models are paused; subsequent motion makes the report stale.
 A self-contained example is in `examples/v2/animation.html` in the source
 checkout (serve with `pnpm start`). It includes Play, Pause, Resume, Stop and Reset.
 
-The app controller also supports an optional `animation-*` group (see the new
-site's HTML template): `animation-details`, `animation-fields`, `animation-axis`,
-`animation-seconds`, `animation-direction`, `animation-play`, `animation-pause`,
-`animation-stop`, `animation-status` and `animation-error`. Supply the whole group
-or omit it. It exposes selected-model spin around the mesh center, duration
-(0.1–3,600 seconds per turn), direction and playback buttons. Other models keep
-playing when selection changes. Manual tools capture the current animated pose.
-Readouts update at most four times per second; geometry and GPU buffers are reused.
-
-`mountViewstlApp` composes `animation_state_callback` and
-`animation_complete_callback` options with its own UI behavior. `app.getState()`
-includes each model's current transform and `animation` state. Ordinary files
-never auto-spin. Imported running animations are paused when the browser reports
-`prefers-reduced-motion: reduce`; explicit user playback remains available.
-
-App print checks pause running target models. Optional `print-resume` and
-`print-animation-note` elements expose resumption; closing the panel does not
-silently restart motion. Resuming clears stale results and keeps the panel open.
-Scene saving includes playback; PNG and regular model saving capture a pose.
+Website animation controls are host-owned. Use the animation API above and
+`ViewerSession.centerPivot(id)` for a spin around the mesh center. Session model
+snapshots expose playback and definitions without accessing private model data.
+The host decides how to respect reduced-motion preferences, pause for a print
+check, present a Resume action and update its readouts. Scene saving retains
+playback; PNG and regular model exports snapshot the current pose.
 
 ## Existing API and intentional differences
 
@@ -596,11 +578,10 @@ viewer.add_model({id: 0, remote_url: 'https://example.com/model.stl'});
 // Optional remote_format: 'stl', 'obj', '3mf', 'step', 'stp', 'iges', 'igs'.
 ```
 
-`mountViewstlApp` accepts the same endpoint and exposes `app.openURL(url, format)`.
-Its optional `url-dialog`/`url-form` controls are shown in the preview site's HTML.
-The site supplies markup, styles and configuration; URL interaction, loading,
-progress, cancellation and parsing live in the plugin. App jobs allow ten minutes
-by default; low-level viewer worker_timeout remains configurable as before.
+`ViewerSession` accepts the endpoint inside `viewer_options` and exposes
+`session.openURL(url, format)`. The host owns URL input and progress presentation;
+the plugin owns validation, streaming, parsing, the queue and cancellation.
+Session jobs default to a ten-minute worker timeout.
 
 The relay receives the URL in a JSON POST body and streams the response without
 file storage. A signed URL's query string is not displayed as a model name or
@@ -615,14 +596,9 @@ Downloaded names are metadata, not reloadable URLs; use VSB to package a scene
 containing these models. Embedders must provide their own compatible relay; no
 ViewSTL server is implicitly used by the library.
 
-When `url_import_endpoint` is configured, `mountViewstlApp` also accepts dropped
-links (`text/uri-list`), Firefox URL/title data, and plain HTTP/HTTPS URL text.
-URL drops use `openURL` and its existing queue, relay, progress, cancellation and
-error handling. Multiple URI-list links are deduplicated per drop. Local files
-take priority over accompanying URL metadata. Plain text is not searched for
-embedded links, HTML drag contents are not parsed, and drops into text inputs or
-editable content retain their normal behavior. This belongs to the optional app
-controller; the low-level viewer's existing file-drop contract is unchanged.
+A host can extract links from its own drop events and call `session.openURL`.
+Page-wide drag overlays, editable-field handling and URL dialogs belong to that
+host. The low-level viewer's existing local file-drop contract is unchanged.
 
 The reference relay lives in the website repository's `relay/` directory. Its
 request is `{url, format, max_bytes}` and its response supplies X-ViewSTL-Format,
@@ -632,24 +608,10 @@ worker/fetch; the server then closes the upstream connection.
 
 ## Local mesh export
 
-The optional `mountViewstlApp` controller can bind a Save dialog using the
-`save-*` control group in the preview site's `site/index.html`. Include the entire
-group or omit it; incomplete groups fail before mounting. All event handling,
-selection, progress, cancellation and download dispatch compile into `viewstl.js`.
-The host supplies markup, styles and explanatory copy (format option `data-note`
-attributes and the CAD limitation paragraph). No Save UI is injected by the
-low-level viewer.
-
-The reference dialog exports only the current app selection for mesh formats,
-with positions/rotations applied and millimetre output. Unitless STL/OBJ inputs
-are assumed to be millimetres. Its optional color setting applies to OBJ/3MF;
-colored OBJ uses ZIP. It calls `download_models` with explicit model IDs, so
-closing an editing panel does not clear the export selection. VSB/VSJ always
-export the whole scene. `save-scope` is a text status element displaying the
-selected filename or whole-scene model count, not a scope dropdown. Cancel, Escape,
-the close button, backdrop dismissal, changing selection, starting an import,
-removing/clearing models and app disposal cancel an active export. Errors stay
-in the dialog and permit another format. Existing PNG controls remain separate.
+The host owns its Save dialog and passes explicit model IDs/options to the
+export methods. Model exports and whole-scene VSB/VSJ exports remain distinct.
+Use AbortSignal to cancel when the host dismisses or changes an active operation;
+the plugin does not prescribe a modal layout or panel-closing policy.
 
 All exporters live in the plugin and run in disposable workers. They generate
 local Blobs; no relay, upload, server conversion or third-party network endpoint
@@ -787,8 +749,7 @@ PNG and scene exports. Removing or clearing its model releases the frame.
 `pick_model(clientX, clientY)` returns `{id, distance}` for the nearest visible
 surface, or `null` for empty space. Coordinates use the same viewport coordinate
 system as mouse events. It respects transforms, hidden models and section cuts.
-The preview calls it on double-click only; ordinary dragging does not run a mesh
-intersection scan. The existing legacy click callbacks retain their behavior.
+The host chooses when to pick: for example, on double-click or at the start of a selection drag. The existing legacy click callbacks retain their behavior.
 
 The preview provides Move, Rotate and Depth controls per model. Rotation uses
 degrees in the UI and compensates for the original mesh center; the plugin's
@@ -954,23 +915,14 @@ metadata uses weak references so retaining a report cannot retain removed meshes
 
 Highlights use temporary native WebGL line buffers and are excluded from PNG,
 mesh and scene exports. They show up to 128 faces or 256 edges per check, through
-occluding surfaces. Closing the site panel clears highlights. The preview exposes
-the feature under **Info → Check for 3D printing**, with selected/all model scope,
-basic/detailed depth and collapsed optional FDM settings. Unit confirmation resets
-when the checked scope or an existing result's geometry/transform changes. A complete
-optional `print-*` control group is bound by `mountViewstlApp`; hosts omitting the
-entire group keep their previous behavior. The website only supplies markup/styles.
-
-The check panel stays open while using the canvas, other controls or dialogs,
-loading files, selecting models and clearing the scene. Only its close button or
-Escape with focus inside the panel dismisses it. Reopening it from Info reveals
-and focuses the existing panel. Loading or changing the checked selection cancels
-an active check; stale results are cleared. Loading and empty scenes disable Run
-and show the current availability without closing the panel.
+occluding surfaces. The host controls results presentation and calls
+`clear_printability()` when appropriate. It decides when its panel closes, how
+stale results are shown, and whether to pause/resume animation. The plugin exposes
+analysis, cancellation, validity checks and geometry highlighting without a UI.
 
 ## Model size, units, duplicates, cameras and measurements (rc.6)
 
-All operations below are implemented inside the plugin. The optional site controls remain a thin HTML/CSS host.
+All operations below are implemented inside the plugin. Their interface controls and presentation belong to the host.
 
 `viewer.resize_model(id, [2, 2, 2])` doubles the model about its world-space bounds center, preserving rotation and placement. Positive finite XYZ factors are required; independent factors allow nonuniform scaling. It stops only that model's animation. `get_model_size(id)` returns dimensions and the reset baseline in millimetres. `reset_model_size(id)` restores that baseline while retaining file-unit corrections.
 
@@ -990,4 +942,4 @@ Measurements use workers and support `signal`, `max_time_ms` (default 30 seconds
 
 VSB/VSJ retain size baselines, file-unit interpretation, display units, duplicate labels and bookmarks. VSB still embeds geometry; VSJ still needs the referenced source files. No second unit conversion occurs during import. Appending scenes merges bookmark names with numbered suffixes; a combined total above 32 rejects the incoming scene. Old files without the new optional fields continue to load. The `size_state.unit_factor` serialization field preserves source-unit correction separately from resize factors for exports with `apply_transforms:false`.
 
-The optional app control group is listed in `src/app-tools.js` (`toolsControls`). Provide the whole group or omit it when embedding older markup. The preview's `site/index.html` is a complete example. Models contains collapsed Size & units and Duplicate; View contains collapsed Camera & saved views; Info contains area and the volume calculation. No server is involved for local files or measurements.
+Local measurements and model operations need no server. Use the public APIs with the interface of your choice.

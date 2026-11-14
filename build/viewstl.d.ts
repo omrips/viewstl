@@ -426,59 +426,109 @@ export class StlViewer {
 }
 export default StlViewer;
 
-export interface ViewstlAppOptions {
-  /** Composed with the app's own playback controls and reduced-motion policy. */
-  animation_state_callback?: ViewerOptions["animation_state_callback"];
-  animation_complete_callback?: ViewerOptions["animation_complete_callback"];
-  url_import_endpoint?: string;
-  worker_url?: string | URL;
-  worker_factory?: () => Worker;
-  worker_timeout?: number;
-  /** Optional sample URL; omit to hide the sample button. */
-  sample_url?: string;
-  sample_name?: string;
-  /** Prefix used by this root's control IDs and associated label/ARIA references. */
-  id_prefix?: string;
+export type SessionArrangement = "original" | "side-by-side" | "custom";
+export interface SessionModel {
+  id: number;
+  name: string;
+  size: number | null;
+  units: string | null;
+  bounds: { min: number[]; max: number[] };
+  position: Vector3;
+  /** Euler XYZ in degrees, rotated around the model center. */
+  rotation: Vector3;
+  originalPosition: Vector3;
+  originalRotation: Vector3;
+  embedded: boolean;
+  color: string | null;
+  originalColor: string | null;
+  animationPivot?: boolean;
+  animation: AnimationPlaybackState | null;
+  animationDefinition: Animation | null;
 }
-export interface ViewstlAppState {
-  selectedId: number | null;
-  busy: boolean;
-  arrangement: string;
-  memoryBudget: number;
-  models: Array<{
-    id: number;
-    name: string;
-    size?: number;
-    units: string | null;
-    position: Vector3;
-    /** Euler XYZ angles in degrees, about the model's own center. */
-    rotation: Vector3;
-    color: string | null;
-    animation: AnimationPlaybackState;
-  }>;
+export type SessionEvent =
+  | { type: "ready" }
+  | { type: "busy"; busy: boolean }
+  | { type: "opening" | "load-failed"; name: string }
+  | { type: "loaded"; name: string; id: number }
+  | { type: "scene-loaded"; name: string; ids: number[] }
+  | { type: "error"; code: string; message: string; source?: string }
+  | {
+      type: "animation";
+      id: number;
+      state: AnimationPlaybackState;
+      reason: AnimationStateReason;
+    }
+  | {
+      type: "progress";
+      scene: boolean;
+      progress: { phase?: string; loaded?: number; total?: number };
+    };
+export interface ViewerSessionOptions {
+  /** Initial models are added through openFiles/openURL, not viewer_options. */
+  viewer_options?: Omit<ViewerOptions, "models" | "allow_drag_and_drop">;
+  device_memory?: number;
+  /** Optional fallback colors for models with no embedded colors. */
+  colors?: string[];
+  on_event?: (event: SessionEvent) => void;
 }
-export interface ViewstlApp {
-  openURL(url: string, format?: ModelOptions["remote_format"]): Promise<void>;
-  /** Adds files to the scene; settles when the queue drains or is cancelled.
-   * Per-file errors appear in the app notice and preserve existing models. */
+export interface ManipulationOptions {
+  /** Event is absent for wheel input. Return null to ignore an empty hit. */
+  getModelId(event?: PointerEvent): number | null;
+  getTool(): "move" | "rotate" | "depth";
+  onChange?(id: number): void;
+  onStart?(id: number): void;
+  onEnd?(id: number, cancelled: boolean): void;
+}
+export interface ManipulationBinding {
+  setEnabled(enabled: boolean): void;
+  dispose(): void;
+}
+/** UI-independent queue/scene/editor session. Mounting creates no WebGL context.
+ * Use viewer for existing rendering, saving, analysis, resize and camera APIs.
+ * Methods taking angles use degrees; StlViewer's original methods retain radians.
+ */
+export class ViewerSession {
+  constructor(container: HTMLElement, options?: ViewerSessionOptions);
+  readonly viewer: StlViewer | null;
+  readonly busy: boolean;
+  readonly arrangement: SessionArrangement;
+  readonly grid: { enabled: boolean; spacing: number; height: number };
+  readonly memoryPolicy: {
+    budget: number;
+    estimated: number;
+    reported: boolean;
+    limits: {
+      max_memory_bytes: number;
+      max_file_bytes: number;
+      max_triangles: number;
+      max_uncompressed_bytes: number;
+    };
+  };
+  ready(): Promise<StlViewer>;
   openFiles(
     files: Iterable<File | { name: string; url: string; size?: number }>,
   ): Promise<void>;
+  openURL(
+    url: string,
+    format?: ModelOptions["remote_format"] | "vsb" | "vsj",
+  ): Promise<void>;
   cancelLoading(): void;
-  clear(): void;
-  select(id: number): void;
+  /** Detached constant-size metadata; no geometry copies or mesh scans. */
+  getModel(id: number): SessionModel | null;
+  getModels(): SessionModel[];
+  setPosition(id: number, position: Vector3): boolean;
+  setRotation(id: number, degrees: Vector3): boolean;
+  prepareManual(id: number): void;
+  centerPivot(id: number): void;
+  moveDepth(id: number, amount: number): boolean;
+  bindManipulation(options: ManipulationOptions): ManipulationBinding;
+  setArrangement(mode: SessionArrangement): void;
+  setGrid(enabled: boolean, spacing?: number, height?: number): void;
+  duplicate(id: number): number;
   remove(id: number): void;
-  /** Detached state snapshot; changing it never mutates the scene. */
-  getState(): ViewstlAppState;
-  /** Cancels pending work and releases listeners, workers, and WebGL resources. */
+  clear(): void;
   dispose(): void;
 }
-/** Optional complete app controller for the documented HTML control template.
- * No WebGL context, workers or CAD assets are created until a file is opened. */
-export function mountViewstlApp(
-  root: Document | HTMLElement,
-  options?: ViewstlAppOptions,
-): ViewstlApp;
 
 export interface PrintProfile {
   technology: "fdm";

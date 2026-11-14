@@ -6,7 +6,7 @@ test("ES module import is safe without DOM or WebGL globals", async () => {
   const {
     default: Viewer,
     StlViewer,
-    mountViewstlApp,
+    ViewerSession,
   } = await import("../../build/viewstl.js");
   assert.equal(Viewer, StlViewer);
   const manifest = JSON.parse(
@@ -14,17 +14,20 @@ test("ES module import is safe without DOM or WebGL globals", async () => {
   );
   assert.equal(Viewer.version, manifest.version);
   assert.match(Viewer.workerURL, /viewstl.worker.js$/);
-  assert.equal(typeof mountViewstlApp, "function");
-  assert.throws(() => mountViewstlApp(null), /root is required/);
+  assert.equal(typeof ViewerSession, "function");
+  const session = new ViewerSession(null);
+  assert.equal(session.viewer, null);
+  assert.deepEqual(session.getModels(), []);
+  session.dispose();
 });
 test("CommonJS import is SSR safe and exports same constructor", () => {
   const {
     StlViewer,
     default: Viewer,
-    mountViewstlApp,
+    ViewerSession,
   } = createRequire(import.meta.url)("../../build/viewstl.cjs");
   assert.equal(Viewer, StlViewer);
-  assert.equal(typeof mountViewstlApp, "function");
+  assert.equal(typeof ViewerSession, "function");
 });
 test("classic script contains no Three.js, XML or ZIP library runtime", async () => {
   const code = await readFile("build/stl_viewer.min.js", "utf8");

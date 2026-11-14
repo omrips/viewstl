@@ -3,6 +3,37 @@
 This file records dated checks. Older sections describe the alpha at the time
 of each check; release-candidate results are recorded separately below.
 
+## rc.9 website/plugin separation — 2026-11-14
+
+The four browser/CJS/classic distributions contain no website controller,
+required page-control IDs or `mountViewstlApp` export. `ViewerSession` was tested
+in a bare page with only two containers: lazy initialization, independent state,
+malformed-file recovery, detached snapshots, transforms, duplication, arrangement,
+animation metadata, manipulation binding, VSB import/export, failed scene append,
+cancellation and resource disposal all passed (17 checks).
+
+144 plugin unit tests, strict browser/Node TypeScript checks and 37 legacy-file
+hashes passed. Seven UI input tests moved with their source to the website and
+passed there. Native WebGL2, workers/CAD assets and Node analysis are retained.
+
+The candidate-packed website passed 54 shortcut, 24 lifecycle, 42 save/PNG,
+26 scene-save, 25 scene-open, 39 persistent-print-panel, 25 animation, 25 model-tool,
+15 URL-drop and 578 supporting-page/navigation checks in Windows Edge 157.
+Ten production layout assertions passed in Windows Chrome 157, including
+footer/resize behavior. Viewports, touch and reduced motion were emulated;
+physical Android/iOS, Safari/Firefox and broad large-CAD stress were not tested.
+URL fixtures intercepted the relay; local save/check tests recorded no uploads.
+
+The compressed ESM plugin entry is 44,926 bytes, and the separate minified site
+controller is 14,591 bytes. Production's measured initial viewer/page assets
+total 77,933 gzip bytes (excluding third-party ads/analytics and lazy assets).
+These are artifact sizes, not download-time or memory benchmarks.
+
+Evidence: plugin `test-results/separation-tests.txt` and the sibling website's
+`results/separate-site-ui-20261114/final/`. Website sources and tests are not part
+of the plugin package. Published rc.8/legacy builds retain their original APIs;
+rc.9 documents the migration for consumers of the removed app helper.
+
 ## rc.8 selection-tool verification — 2026-11-14
 
 Selection mode opens the compact tool box with Move active. The website passed

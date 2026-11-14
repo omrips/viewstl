@@ -1,4 +1,4 @@
-//=========== Stl Viewer v2.0.0-rc.8, by Omri Rips, Viewstl.com, November 2026 ; admin@viewstl.com ===========
+//=========== Stl Viewer v2.0.0-rc.9, by Omri Rips, Viewstl.com, November 2026 ; admin@viewstl.com ===========
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -21,8 +21,8 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var commonjs_exports = {};
 __export(commonjs_exports, {
   StlViewer: () => StlViewer,
-  default: () => viewer_default,
-  mountViewstlApp: () => mountViewstlApp
+  ViewerSession: () => ViewerSession,
+  default: () => viewer_default
 });
 module.exports = __toCommonJS(commonjs_exports);
 
@@ -1733,8 +1733,8 @@ function importScene(source, options = {}) {
     await this.when_ready;
     check();
     oldCamera = this.get_camera_state();
-    const format2 = options.format || sceneFormat(typeof source === "string" ? source : source.name);
-    if (!["vsb", "vsj"].includes(format2))
+    const format = options.format || sceneFormat(typeof source === "string" ? source : source.name);
+    if (!["vsb", "vsj"].includes(format))
       throw new Error("Choose VSB or VSJ for a scene");
     let remote, relay;
     if (typeof source === "string") {
@@ -1767,8 +1767,8 @@ function importScene(source, options = {}) {
         source,
         remote,
         relay,
-        format: format2,
-        name: `scene.${format2}`,
+        format,
+        name: `scene.${format}`,
         limits
       },
       (p) => {
@@ -2129,8 +2129,8 @@ function exportFilename(filename, extension) {
 function exportOptions(options = {}) {
   const aliases = { stp: "step", igs: "iges" };
   const requested = String(options.format || "").toLowerCase();
-  const format2 = aliases[requested] || requested;
-  if (!["stl", "obj", "3mf", "step", "iges"].includes(format2))
+  const format = aliases[requested] || requested;
+  if (!["stl", "obj", "3mf", "step", "iges"].includes(format))
     throw new Error("Export format must be stl, obj, 3mf, step or iges");
   const units = options.units ?? "mm";
   if (!["mm", "inch"].includes(units))
@@ -2140,10 +2140,10 @@ function exportOptions(options = {}) {
       throw new Error(`${key} must be a boolean`);
   if (options.on_progress !== void 0 && typeof options.on_progress !== "function")
     throw new Error("on_progress must be a function");
-  const colors = options.colors !== false && ["obj", "3mf"].includes(format2);
-  const extension = format2 === "obj" && colors ? "zip" : format2;
+  const colors = options.colors !== false && ["obj", "3mf"].includes(format);
+  const extension = format === "obj" && colors ? "zip" : format;
   return {
-    format: format2,
+    format,
     units,
     colors,
     apply_transforms: options.apply_transforms !== false,
@@ -2370,7 +2370,7 @@ function modelOptions(input) {
   return out;
 }
 var StlViewer = class _StlViewer {
-  static version = "2.0.0-rc.8";
+  static version = "2.0.0-rc.9";
   static workerURL = null;
   constructor(parent, options = {}) {
     if (!parent?.appendChild)
@@ -3624,8 +3624,8 @@ var StlViewer = class _StlViewer {
       );
   }
   async export_scene(options = {}) {
-    const format2 = String(options.format || "").toLowerCase();
-    if (!["vsb", "vsj"].includes(format2))
+    const format = String(options.format || "").toLowerCase();
+    if (!["vsb", "vsj"].includes(format))
       throw new Error("Scene format must be vsb or vsj");
     if (options.force_basename !== void 0 && typeof options.force_basename !== "boolean")
       throw new Error("force_basename must be a boolean");
@@ -3648,7 +3648,7 @@ var StlViewer = class _StlViewer {
     if (!models.length) throw new Error("No models to export");
     if (models.some((m) => !m.geometry))
       throw new Error("A model has not finished loading");
-    if (models.length + (format2 === "vsb" ? 1 : 0) > this.limits.max_archive_entries)
+    if (models.length + (format === "vsb" ? 1 : 0) > this.limits.max_archive_entries)
       throw new Error("Scene model count limit exceeded");
     const triangles = models.reduce((sum, m) => sum + m.geometry.triangles, 0);
     if (triangles > this.limits.max_triangles)
@@ -3656,19 +3656,19 @@ var StlViewer = class _StlViewer {
     const scene = this.get_vsj(
       true,
       !!options.force_basename,
-      format2 === "vsb"
+      format === "vsb"
     );
     const json = JSON.stringify(scene), manifestBytes = new Blob([json]).size;
     if (manifestBytes > this.limits.max_file_bytes)
       throw new Error("Scene manifest size limit exceeded");
-    if (format2 === "vsb" && manifestBytes + models.length * 84 + triangles * 50 > this.limits.max_uncompressed_bytes)
+    if (format === "vsb" && manifestBytes + models.length * 84 + triangles * 50 > this.limits.max_uncompressed_bytes)
       throw new Error("Scene archive limit exceeded");
-    const working = MEMORY_OVERHEAD + json.length * 8 + (format2 === "vsb" ? triangles * 512 : 0);
+    const working = MEMORY_OVERHEAD + json.length * 8 + (format === "vsb" ? triangles * 512 : 0);
     assertMemory(this.limits, this._occupiedMemory() + working, "scene export");
     this._exportBytes += working;
     let job, cancel, callbackError;
     try {
-      const snapshot = format2 === "vsb" ? models.map((m, index) => ({
+      const snapshot = format === "vsb" ? models.map((m, index) => ({
         id: m.id,
         triangles: m.geometry.triangles,
         positions: m.geometry.positions.slice(),
@@ -3683,7 +3683,7 @@ var StlViewer = class _StlViewer {
       });
       checkAbort();
       let blob;
-      if (format2 === "vsj") {
+      if (format === "vsj") {
         blob = new Blob([json], { type: "application/json" });
         options.on_progress?.({
           loaded: models.length,
@@ -3723,8 +3723,8 @@ var StlViewer = class _StlViewer {
       checkAbort();
       return {
         blob,
-        format: format2,
-        filename: exportFilename(options.filename, format2),
+        format,
+        filename: exportFilename(options.filename, format),
         model_ids: models.map((m) => m.id),
         triangles,
         representation: "scene"
@@ -4094,299 +4094,6 @@ var StlViewer = class _StlViewer {
 };
 var viewer_default = StlViewer;
 
-// src/app-tools.js
-var toolsControls = [
-  "size-details",
-  "size-fields",
-  "size-x",
-  "size-y",
-  "size-z",
-  "size-lock",
-  "size-percent",
-  "size-apply",
-  "size-cancel",
-  "size-reset",
-  "size-error",
-  "file-units",
-  "file-units-note",
-  "display-units",
-  "size-unit-label",
-  "duplicate-model",
-  "camera-preset",
-  "bookmark-name",
-  "bookmark-list",
-  "bookmark-save",
-  "bookmark-restore",
-  "bookmark-rename",
-  "bookmark-delete",
-  "camera-error",
-  "info-area",
-  "info-volume",
-  "measure-model",
-  "measure-cancel",
-  "measure-status"
-];
-var axes2 = ["x", "y", "z"];
-var format = new Intl.NumberFormat(void 0, { maximumSignificantDigits: 7 });
-function bindAppTools({
-  $,
-  listen,
-  window: window2,
-  getViewer,
-  getState,
-  changeSize,
-  duplicate,
-  refresh,
-  announce
-}) {
-  let draftKind = null, lastAxis = 0, base = null, selected = null, measurement = null, disposed = false;
-  const error = (id, message = "") => {
-    $(id).textContent = message;
-    $(id).hidden = !message;
-  };
-  const factor = () => getViewer()?.display_units === "inch" ? 25.4 : 1;
-  const value = (v) => Number(v.toPrecision(10));
-  function syncInfo() {
-    const v = getViewer(), { selectedId, busy } = getState(), m = v?._models.get(selectedId);
-    const s = m?.scaleVector, cached = m?._measurements;
-    const valid = cached && cached.positions === m.geometry.positions && cached.key === s.join(",");
-    const unit = factor() === 1 ? "mm" : "in";
-    const area = valid ? cached.result.area_mm2 : s && s[0] === s[1] && s[1] === s[2] ? m.geometry.area * s[0] ** 2 : null;
-    $("info-area").textContent = area == null ? "Calculate" : format.format(area / factor() ** 2) + " " + unit + "\xB2";
-    $("info-volume").textContent = valid ? cached.result.volume_valid ? format.format(cached.result.volume_mm3 / factor() ** 3) + " " + unit + "\xB3" : "Unavailable" : "Not checked";
-    if (!measurement)
-      $("measure-status").textContent = valid ? cached.result.volume_reason : "Calculate to check enclosed volume. Runs on your device.";
-    $("measure-model").disabled = busy || !m || !!measurement;
-    $("measure-cancel").hidden = !measurement;
-  }
-  function syncBookmarks() {
-    const v = getViewer(), previous = $("bookmark-list").value, bookmarks = v?.get_camera_bookmarks() || [];
-    $("bookmark-list").replaceChildren(
-      ...bookmarks.map((b) => {
-        const option = window2.document.createElement("option");
-        option.value = b.name;
-        option.textContent = b.name;
-        return option;
-      })
-    );
-    if (bookmarks.some((b) => b.name === previous))
-      $("bookmark-list").value = previous;
-    for (const id of [
-      "bookmark-restore",
-      "bookmark-rename",
-      "bookmark-delete",
-      "bookmark-list"
-    ])
-      $(id).disabled = !bookmarks.length;
-    $("bookmark-save").disabled = !v || bookmarks.length >= 32;
-  }
-  function sync() {
-    if (disposed) return;
-    const { selectedId, busy } = getState(), v = getViewer(), m = v?._models.get(selectedId);
-    if (selectedId !== selected) {
-      measurement?.abort();
-      selected = selectedId;
-    }
-    draftKind = null;
-    base = m?.geometry ? v.get_model_size(selectedId) : null;
-    $("size-fields").disabled = busy || !base;
-    $("duplicate-model").disabled = busy || !base;
-    $("display-units").value = v?.display_units || "mm";
-    $("size-unit-label").textContent = factor() === 1 ? "Dimensions in mm" : "Dimensions in inches";
-    $("file-units").value = base?.file_units || "mm";
-    $("file-units").disabled = busy || !base?.editable;
-    $("file-units-note").textContent = base?.editable ? "STL/OBJ have no units. Millimetres are assumed; choose inches to correct the physical size." : "Explicit file units were converted to millimetres on import.";
-    axes2.forEach((a, i) => {
-      $("size-" + a).value = base ? value(base.dimensions_mm[i] / factor()) : "";
-      $("size-" + a).disabled = !base || base.dimensions_mm[i] === 0;
-    });
-    const ratios = base?.baseline_mm.map((v2, i) => v2 ? base.dimensions_mm[i] / v2 : null).filter((v2) => v2 != null) || [];
-    $("size-percent").value = ratios.length && ratios.every((v2) => Math.abs(v2 / ratios[0] - 1) < 1e-8) ? value(ratios[0] * 100) : "";
-    error("size-error");
-    syncInfo();
-    syncBookmarks();
-  }
-  const attempt = (id, action) => {
-    try {
-      action();
-      error(id);
-    } catch (e) {
-      error(id, e.message);
-    }
-  };
-  axes2.forEach(
-    (a, i) => listen($("size-" + a), "input", () => {
-      if (!base) return;
-      draftKind = "axis";
-      lastAxis = i;
-      const n = $("size-" + a).valueAsNumber;
-      if (!Number.isFinite(n) || n <= 0) return;
-      if ($("size-lock").checked)
-        axes2.forEach((axis, j) => {
-          if (i !== j)
-            $("size-" + axis).value = value(
-              n * base.dimensions_mm[j] / base.dimensions_mm[i]
-            );
-        });
-      $("size-percent").value = "";
-    })
-  );
-  listen($("size-percent"), "input", () => {
-    draftKind = "percent";
-    const n = $("size-percent").valueAsNumber;
-    if (base && Number.isFinite(n) && n > 0)
-      axes2.forEach(
-        (a, i) => $("size-" + a).value = value(
-          base.baseline_mm[i] * n / 100 / factor()
-        )
-      );
-  });
-  listen(
-    $("size-apply"),
-    "click",
-    () => attempt("size-error", () => {
-      if (!base) return;
-      if (!draftKind) return;
-      const current = getViewer().get_model_size(selected).dimensions_mm;
-      let desired = axes2.map((a) => $("size-" + a).valueAsNumber * factor());
-      if (draftKind === "percent") {
-        const percent = $("size-percent").valueAsNumber;
-        if (!Number.isFinite(percent) || percent <= 0)
-          throw new Error("Enter a positive scale percentage.");
-        desired = base.baseline_mm.map((v) => v * percent / 100);
-      } else if ($("size-lock").checked) {
-        const ratio = desired[lastAxis] / base.dimensions_mm[lastAxis];
-        desired = base.dimensions_mm.map((v) => v * ratio);
-      }
-      let ratios = desired.map((n, i) => {
-        if (!Number.isFinite(n) || n < 0 || current[i] > 0 && n === 0)
-          throw new Error("Enter positive dimensions for each non-flat axis.");
-        return current[i] ? n / current[i] : 1;
-      });
-      if (ratios.every((v) => Math.abs(v / ratios[0] - 1) < 1e-12))
-        ratios = ratios.map(() => ratios[0]);
-      changeSize(() => getViewer().resize_model(selected, ratios));
-      announce("Model size updated.");
-    })
-  );
-  listen($("size-cancel"), "click", sync);
-  listen(
-    $("size-reset"),
-    "click",
-    () => attempt("size-error", () => {
-      changeSize(() => getViewer().reset_model_size(selected));
-      announce("Original size restored; file-unit correction retained.");
-    })
-  );
-  listen(
-    $("file-units"),
-    "change",
-    () => attempt("size-error", () => {
-      changeSize(
-        () => getViewer().set_file_units(selected, $("file-units").value)
-      );
-      announce("File units corrected.");
-    })
-  );
-  listen($("display-units"), "change", () => {
-    getViewer()?.set_display_units($("display-units").value);
-    refresh();
-  });
-  listen($("duplicate-model"), "click", () => attempt("size-error", duplicate));
-  listen(
-    $("camera-preset"),
-    "change",
-    () => attempt("camera-error", () => {
-      if ($("camera-preset").value)
-        getViewer().set_camera_view($("camera-preset").value);
-      announce("Camera view updated.");
-      $("camera-preset").value = "";
-    })
-  );
-  const editBookmarks = (action) => attempt("camera-error", () => {
-    const v = getViewer(), bookmarks = v.get_camera_bookmarks();
-    action(bookmarks, v);
-    v.set_camera_bookmarks(bookmarks);
-    syncBookmarks();
-  });
-  listen(
-    $("bookmark-save"),
-    "click",
-    () => editBookmarks((b, v) => {
-      b.push({ name: $("bookmark-name").value, camera: v.get_camera_state() });
-    })
-  );
-  listen(
-    $("bookmark-rename"),
-    "click",
-    () => editBookmarks((b) => {
-      b.find((b2) => b2.name === $("bookmark-list").value).name = $("bookmark-name").value;
-    })
-  );
-  listen(
-    $("bookmark-delete"),
-    "click",
-    () => editBookmarks((b) => {
-      b.splice(
-        b.findIndex((b2) => b2.name === $("bookmark-list").value),
-        1
-      );
-    })
-  );
-  listen(
-    $("bookmark-restore"),
-    "click",
-    () => attempt("camera-error", () => {
-      const b = getViewer().get_camera_bookmarks().find((b2) => b2.name === $("bookmark-list").value);
-      if (b) {
-        getViewer().set_camera_state(b.camera);
-        announce("Saved view restored.");
-      }
-    })
-  );
-  listen(
-    $("bookmark-list"),
-    "change",
-    () => $("bookmark-name").value = $("bookmark-list").value
-  );
-  listen($("measure-cancel"), "click", () => measurement?.abort());
-  listen($("measure-model"), "click", async () => {
-    const id = selected, v = getViewer(), controller = new window2.AbortController();
-    measurement = controller;
-    syncInfo();
-    $("measure-status").textContent = "Calculating area and checking volume\u2026";
-    try {
-      await v.measure_model(id, {
-        signal: controller.signal,
-        on_progress: (p) => {
-          if (selected === id && !disposed)
-            $("measure-status").textContent = p.phase + "\u2026";
-        }
-      });
-      if (!disposed && selected === id) announce("Measurements ready.");
-    } catch (e) {
-      if (!disposed && selected === id)
-        $("measure-status").textContent = e.name === "AbortError" ? "Calculation cancelled." : e.message;
-    } finally {
-      const message = $("measure-status").textContent;
-      if (measurement === controller) measurement = null;
-      if (!disposed) {
-        syncInfo();
-        if (!v._models.get(id)?._measurements && selected === id)
-          $("measure-status").textContent = message;
-      }
-    }
-  });
-  return {
-    sync,
-    syncInfo,
-    dispose() {
-      disposed = true;
-      measurement?.abort();
-    }
-  };
-}
-
 // src/memory-policy.js
 var GiB = 1024 ** 3;
 var MiB = 1024 ** 2;
@@ -4418,9 +4125,9 @@ async function estimateFile(file) {
 }
 
 // src/model-transform.js
-var axes3 = ["x", "y", "z"];
-var vector2 = (p) => axes3.map((a) => p[a]);
-var object2 = (p) => Object.fromEntries(axes3.map((a, i) => [a, p[i]]));
+var axes2 = ["x", "y", "z"];
+var vector2 = (p) => axes2.map((a) => p[a]);
+var object2 = (p) => Object.fromEntries(axes2.map((a, i) => [a, p[i]]));
 var dot2 = (a, b) => a.reduce((sum, v, i) => sum + v * b[i], 0);
 var norm2 = (a) => {
   const n = Math.hypot(...a) || 1;
@@ -4452,7 +4159,7 @@ function rotationMatrix(degrees = { x: 0, y: 0, z: 0 }) {
 var centerOf = (bounds) => bounds.min.map((v, i) => (v + bounds.max[i]) / 2);
 function modelCenter(model) {
   return object2(
-    centerOf(model.bounds).map((v, i) => v + model.position[axes3[i]])
+    centerOf(model.bounds).map((v, i) => v + model.position[axes2[i]])
   );
 }
 function modelRadius(model) {
@@ -4463,7 +4170,7 @@ function modelRadius(model) {
 }
 function enginePosition(model) {
   const c = centerOf(model.bounds), rotated = transform2(rotationMatrix(model.rotation), c);
-  return object2(c.map((v, i) => model.position[axes3[i]] + v - rotated[i]));
+  return object2(c.map((v, i) => model.position[axes2[i]] + v - rotated[i]));
 }
 function modelBounds(model) {
   if (!model.rotation || !Object.values(model.rotation).some((v) => v % 360))
@@ -4559,6 +4266,48 @@ function sceneFloor(models, placement) {
   ) : 0;
 }
 
+// src/model-state.js
+var axes3 = ["x", "y", "z"];
+function syncAnimatedRecord(record, model) {
+  if (!record || !model?.geometry) return;
+  record.bounds = Object.fromEntries(
+    ["min", "max"].map((key) => [
+      key,
+      model.geometry.bounds[key].map(
+        (v, i) => (v - model.center[i]) * model.scaleVector[i]
+      )
+    ])
+  );
+  record.rotation = Object.fromEntries(
+    axes3.map((a) => [a, model["rotation" + a] * 180 / Math.PI % 360])
+  );
+  record.position = { x: 0, y: 0, z: 0 };
+  const offset = enginePosition(record);
+  for (const a of axes3) record.position[a] = model[a] - offset[a];
+}
+function centerAnimationPivot(record, model) {
+  syncAnimatedRecord(record, model);
+  const center = model.geometry.bounds.min.map(
+    (v, i) => (v + model.geometry.bounds.max[i]) / 2
+  );
+  const delta = center.map(
+    (v, i) => (v - model.center[i]) * model.scaleVector[i]
+  );
+  const rotation2 = rotationMatrix(record.rotation);
+  const original = record.originalPosition || { x: 0, y: 0, z: 0 };
+  record.originalPosition = Object.fromEntries(
+    axes3.map((a, i) => [a, original[a] + delta[i]])
+  );
+  for (let i = 0; i < 3; i++)
+    model[axes3[i]] += delta.reduce(
+      (sum, v, j) => sum + rotation2[i * 3 + j] * v,
+      0
+    );
+  model.center = center;
+  record.animationPivot = true;
+  syncAnimatedRecord(record, model);
+}
+
 // src/model-move.js
 var vector3 = (p) => [p.x, p.y, p.z];
 var sub2 = (a, b) => a.map((v, i) => v - b[i]);
@@ -4617,7 +4366,6 @@ function bindModelMove(canvas, {
       if (current.tool === "rotate") onRotate?.(current.id, current.rotation);
       else onMove(current.id, current.position);
     }
-    canvas.classList.remove("moving-model");
     if (canvas.hasPointerCapture(current.pointer))
       canvas.releasePointerCapture(current.pointer);
     onEnd?.(current.id, cancel);
@@ -4654,7 +4402,6 @@ function bindModelMove(canvas, {
     };
     onStart?.(model.id);
     canvas.setPointerCapture(e.pointerId);
-    canvas.classList.add("moving-model");
     canvas.focus({ preventScroll: true });
   });
   on("pointermove", (e) => {
@@ -4716,7 +4463,6 @@ function bindModelMove(canvas, {
       end(true);
       blocked.clear();
       enabled = value;
-      canvas.classList.toggle("model-move-ready", value);
     },
     dispose() {
       end(true);
@@ -4725,1506 +4471,328 @@ function bindModelMove(canvas, {
   };
 }
 
-// src/drop-source.js
-function dropKind(transfer) {
-  const types = Array.from(transfer?.types || [], (type) => type.toLowerCase());
-  if (types.includes("files") || transfer?.files?.length) return "files";
-  if (types.includes("text/uri-list") || types.includes("text/x-moz-url"))
-    return "url";
-  if (types.includes("text/plain")) return "text";
-  return null;
-}
-function droppedURLs(transfer) {
-  if (dropKind(transfer) === "files") return [];
-  const uriList = transfer?.getData("text/uri-list")?.trim();
-  const mozURL = !uriList && transfer?.getData("text/x-moz-url")?.trim();
-  const plain = !uriList && !mozURL && transfer?.getData("text/plain")?.trim();
-  let lines;
-  if (uriList)
-    lines = uriList.split(/\r?\n/).map((s) => s.trim()).filter((s) => s && !s.startsWith("#"));
-  else if (mozURL)
-    lines = [mozURL.split(/\r?\n/)[0]];
-  else if (plain) {
-    lines = plain.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-    if (!lines.every((s) => /^https?:\/\/\S+$/i.test(s))) return [];
-  } else return [];
-  const urls = /* @__PURE__ */ new Set();
-  for (const line of lines) {
-    let url;
-    try {
-      url = new URL(line);
-    } catch {
-    }
-    if (!url || !["https:", "http:"].includes(url.protocol) || url.username || url.password)
-      throw new Error(
-        "Drop a public HTTP or HTTPS file URL without login credentials."
-      );
-    url.hash = "";
-    urls.add(url.href);
-  }
-  return [...urls];
-}
-
-// src/app-export.js
-var exportControls = [
-  "save-button",
-  "save-dialog",
-  "save-form",
-  "save-fields",
-  "save-name",
-  "save-format",
-  "save-scope",
-  "save-colors",
-  "save-colors-row",
-  "save-format-note",
-  "save-cad-note",
-  "save-progress",
-  "save-status",
-  "save-error",
-  "save-submit",
-  "save-cancel",
-  "save-close"
-];
-function bindAppExport({
-  $,
-  listen,
-  window: window2,
-  getState,
-  getViewer,
-  onOpen,
-  announce
-}) {
-  const dialog = $("save-dialog");
-  let job = null, disposed = false, lastSuggestedName = "";
-  const state = () => getState();
-  const available = () => !disposed && !state().busy && state().models.length > 0;
-  const isScene = () => ["vsb", "vsj"].includes($("save-format").value);
-  const clearError = () => {
-    $("save-error").hidden = true;
-    $("save-error").textContent = "";
-  };
-  function formatChanged() {
-    const format2 = $("save-format").value;
-    if (!$("save-name").value || $("save-name").value === lastSuggestedName) {
-      suggestedName();
-    }
-    if ($("save-mesh-note")) $("save-mesh-note").hidden = isScene();
-    if ($("save-scene-note")) $("save-scene-note").hidden = !isScene();
-    $("save-colors-row").hidden = !["obj", "3mf"].includes(format2);
-    $("save-cad-note").hidden = !["step", "iges"].includes(format2);
-    $("save-format-note").textContent = $("save-format").selectedOptions[0]?.dataset.note || "";
-    $("save-submit").textContent = format2 === "obj" && $("save-colors").checked ? "Download ZIP" : "Download file";
-    sync();
-  }
-  function suggestedName() {
-    const { models, selectedId } = state();
-    $("save-name").value = isScene() ? "viewstl-scene" : (models.find((m) => m.id === selectedId)?.name || "model").replace(
-      /\.[^.]+$/,
-      ""
-    );
-    lastSuggestedName = $("save-name").value;
-  }
-  function sync() {
-    $("save-button").disabled = !available() || !!job;
-    $("save-fields").disabled = !!job;
-    $("save-submit").disabled = !available() || !!job;
-    $("save-progress").hidden = !job;
-    $("save-cancel").textContent = job ? "Cancel saving" : "Cancel";
-    const { models, selectedId } = state();
-    const target = isScene() ? `Entire scene \xB7 ${models.length} ${models.length === 1 ? "model" : "models"}` : "Selected model: " + (models.find((m) => m.id === selectedId)?.name || "model");
-    if ($("save-scope").textContent !== target)
-      $("save-scope").textContent = target;
-  }
-  function cancel() {
-    if (job) {
-      const previous = job;
-      job = null;
-      previous.abort();
-      announce("Saving cancelled.");
-    }
-    $("save-status").textContent = "";
-    sync();
-  }
-  function close() {
-    cancel();
-    if (dialog.open) dialog.close();
-  }
-  listen($("save-button"), "click", () => {
-    if (!available() || job) return;
-    onOpen();
-    clearError();
-    $("save-status").textContent = "";
-    suggestedName();
-    formatChanged();
-    sync();
-    dialog.showModal();
-  });
-  listen($("save-format"), "change", () => {
-    clearError();
-    formatChanged();
-  });
-  listen($("save-colors"), "change", formatChanged);
-  listen($("save-cancel"), "click", close);
-  listen($("save-close"), "click", close);
-  listen(dialog, "cancel", (event) => {
-    event.preventDefault();
-    close();
-  });
-  listen(dialog, "close", () => {
-    if (!dialog.open) cancel();
-  });
-  listen($("save-form"), "submit", async (event) => {
-    event.preventDefault();
-    if (job || !available()) return;
-    clearError();
-    const { selectedId } = state();
-    const controller = new window2.AbortController();
-    job = controller;
-    $("save-progress").removeAttribute("value");
-    $("save-status").textContent = "Preparing your file\u2026";
-    sync();
-    try {
-      const settings = {
-        format: $("save-format").value,
-        filename: $("save-name").value.trim() || "model",
-        // App selection remains meaningful even when its editing frame is hidden.
-        model_ids: [selectedId],
-        units: "mm",
-        apply_transforms: true,
-        colors: $("save-colors").checked,
-        signal: controller.signal,
-        on_progress({ loaded, total, phase }) {
-          if (job !== controller || controller.signal.aborted) return;
-          const percent = total ? Math.min(100, Math.floor(100 * loaded / total)) : 0;
-          $("save-progress").value = percent;
-          $("save-status").textContent = phase === "packaging" ? "Packing your scene\u2026" : percent === 100 ? "Finishing your file\u2026" : `Saving\u2026 ${percent}%`;
-        }
-      };
-      const result = isScene() ? await getViewer().download_scene({
-        format: settings.format,
-        filename: settings.filename,
-        signal: settings.signal,
-        on_progress: settings.on_progress,
-        force_basename: true
-      }) : await getViewer().download_models(settings);
-      if (job !== controller || disposed) return;
-      job = null;
-      close();
-      announce(result.filename + " ready to download.");
-    } catch (error) {
-      if (job !== controller || disposed) return;
-      job = null;
-      $("save-status").textContent = "";
-      if (error?.name !== "AbortError") {
-        $("save-error").textContent = error?.message || "This file could not be saved. Try another format.";
-        $("save-error").hidden = false;
-      }
-    } finally {
-      if (!disposed && (!job || job === controller)) sync();
-    }
-  });
-  formatChanged();
-  sync();
-  return {
-    sync,
-    close,
-    dispose() {
-      close();
-      disposed = true;
-    }
-  };
-}
-
-// src/app-print.js
-var printControls = [
-  "print-button",
-  "print-panel",
-  "print-close",
-  "print-form",
-  "print-fields",
-  "print-scope",
-  "print-level",
-  "print-units",
-  "print-fdm",
-  "print-wall",
-  "print-angle",
-  "print-bed-x",
-  "print-bed-y",
-  "print-bed-z",
-  "print-run",
-  "print-cancel",
-  "print-status",
-  "print-results",
-  "print-clear",
-  "print-target"
-];
-function bindAppPrint({
-  $,
-  listen,
-  window: window2,
-  getState,
-  getViewer,
-  onOpen,
-  announce
-}) {
-  let job = null, report = null, timer = null, disposed = false, scopeKey = "", previousScope = "", unavailable = false;
-  const panel = $("print-panel"), document2 = panel.ownerDocument;
-  const pausedForCheck = /* @__PURE__ */ new Set();
-  const summary = {
-    issues_found: "Issues found",
-    incomplete: "Check incomplete",
-    no_issues_found: "No issues found in completed checks"
-  };
-  const text = (tag, value) => {
-    const el = document2.createElement(tag);
-    el.textContent = value;
-    return el;
-  };
-  const stateIds = () => $("print-scope").value === "all" ? getState().models.map((m) => m.id) : [getState().selectedId];
-  const key = () => JSON.stringify(stateIds());
-  const clear = () => {
-    getViewer()?.clear_printability();
-    $("print-clear").hidden = true;
-  };
-  function sync() {
-    if (disposed) return;
-    const s = getState();
-    $("print-button").disabled = s.busy || !s.models.length;
-    if (panel.hidden) return;
-    for (const id of pausedForCheck)
-      if (!s.models.some((m) => m.id === id) || getViewer()?.get_model_animation_state(id)?.status !== "paused")
-        pausedForCheck.delete(id);
-    if ($("print-resume")) {
-      $("print-resume").hidden = !pausedForCheck.size;
-      $("print-resume").disabled = !!job || s.busy;
-    }
-    if ($("print-animation-note"))
-      $("print-animation-note").hidden = !pausedForCheck.size;
-    const wasUnavailable = unavailable;
-    unavailable = s.busy || !s.models.length;
-    $("print-run").disabled = !!job || unavailable;
-    if (previousScope !== key()) {
-      $("print-units").checked = false;
-      previousScope = key();
-    }
-    $("print-target").textContent = $("print-scope").value === "all" ? `All ${s.models.length} models, checked separately` : s.models.find((m) => m.id === s.selectedId)?.name || "No model selected";
-    if (job && (unavailable || scopeKey !== key())) cancel();
-    if (report && (!getViewer()?.is_printability_current(report) || scopeKey !== key())) {
-      report = null;
-      $("print-units").checked = false;
-      clear();
-      $("print-results").replaceChildren();
-      $("print-status").textContent = "Model or selection changed. Run the check again.";
-    }
-    if (unavailable) {
-      if (!s.models.length) {
-        report = null;
-        clear();
-        $("print-results").replaceChildren();
-      }
-      $("print-status").textContent = s.busy ? "Opening models. Checks will be available when loading finishes." : "Open a model to run a print check.";
-    } else if (wasUnavailable && !job) {
-      $("print-status").textContent = report ? summary[report.summary] : "Ready to check. Choose Run check to analyze the current model selection.";
-    }
-  }
-  function render(value) {
-    const elements = [];
-    for (const model of value.models) {
-      const section = document2.createElement("section");
-      section.append(
-        text(
-          "h3",
-          getState().models.find((m) => m.id === model.model_id)?.name || model.name
-        )
-      );
-      section.append(
-        text(
-          "p",
-          `${model.dimensions_mm?.map((v) => Number(v.toPrecision(5))).join(" \xD7 ") || "Unknown size"} mm \xB7 ${(model.elapsed_ms / 1e3).toFixed(2)} s`
-        )
-      );
-      if (model.volume_valid)
-        section.append(
-          text(
-            "p",
-            `Enclosed volume at current mm scale: ${Number(model.volume_mm3.toPrecision(6))} mm\xB3`
-          )
-        );
-      for (const c of model.checks) {
-        const details = document2.createElement("details");
-        details.dataset.check = c.code;
-        details.dataset.status = c.status;
-        const status = {
-          pass: "Passed",
-          issue: c.severity === "info" ? "Information" : "Review",
-          inconclusive: "Inconclusive",
-          not_run: "Not run"
-        }[c.status];
-        details.append(
-          text(
-            "summary",
-            `${status} \xB7 ${c.label}${c.count ? ` (${c.count})` : ""}${c.estimated ? " \u2014 estimate" : ""}`
-          )
-        );
-        details.append(text("p", c.message));
-        if (c.area_mm2 != null)
-          details.append(
-            text("p", `Area: ${Number(c.area_mm2.toPrecision(5))} mm\xB2`)
-          );
-        if (c.minimum_sampled_mm != null)
-          details.append(
-            text(
-              "p",
-              `Smallest sampled distance: ${Number(c.minimum_sampled_mm.toPrecision(5))} mm`
-            )
-          );
-        if (c.triangle_ids.length || c.edge_vertices.length) {
-          const button = text("button", "Show locations");
-          button.type = "button";
-          button.dataset.issue = c.code;
-          button.dataset.model = model.model_id;
-          details.append(button);
-          details.append(
-            text(
-              "p",
-              "Highlights show a bounded sample, including edges hidden behind surfaces."
-            )
-          );
-        }
-        section.append(details);
-      }
-      elements.push(section);
-    }
-    $("print-results").replaceChildren(...elements);
-  }
-  function cancel() {
-    job?.abort();
-  }
-  function close(focus = true) {
-    cancel();
-    panel.hidden = true;
-    $("workspace")?.classList.remove("print-check-open");
-    clear();
-    window2.clearInterval(timer);
-    timer = null;
-    $("print-button").setAttribute("aria-expanded", "false");
-    if (focus && !disposed)
-      ($("print-button").offsetParent && !$("print-button").disabled ? $("print-button") : $("info-button").offsetParent ? $("info-button") : $("sample-button"))?.focus();
-  }
-  function changed() {
-    cancel();
-    report = null;
-    clear();
-    $("print-results").replaceChildren();
-    $("print-status").textContent = "Settings changed. Run the check again.";
-    sync();
-  }
-  listen($("print-button"), "click", () => {
-    if (!panel.hidden) {
-      onOpen();
-      sync();
-      panel.scrollTop = 0;
-      $("print-run").focus();
-      return;
-    }
-    onOpen();
-    panel.hidden = false;
-    $("workspace")?.classList.add("print-check-open");
-    $("print-button").setAttribute("aria-expanded", "true");
-    sync();
-    timer = window2.setInterval(sync, 400);
-    $("print-run").focus();
-  });
-  listen($("print-close"), "click", () => close());
-  listen(panel, "keydown", (e) => {
-    if (e.key === "Escape") {
-      e.stopPropagation();
-      e.preventDefault();
-      close();
-    }
-  });
-  listen($("print-fields"), "change", changed);
-  listen($("print-clear"), "click", clear);
-  listen($("print-cancel"), "click", cancel);
-  if ($("print-resume"))
-    listen($("print-resume"), "click", () => {
-      if (job || getState().busy) return;
-      for (const id of pausedForCheck)
-        if (getState().models.some((m) => m.id === id) && getViewer().get_model_animation_state(id)?.status === "paused")
-          getViewer().resume_model_animation(id);
-      pausedForCheck.clear();
-      report = null;
-      clear();
-      $("print-results").replaceChildren();
-      $("print-status").textContent = "Animation resumed. Pause and run the check again for the new pose.";
-      sync();
-    });
-  listen($("print-results"), "click", (e) => {
-    const b = e.target.closest("button[data-issue]");
-    if (!b || !report) return;
-    try {
-      getViewer().show_printability(report, {
-        issue: b.dataset.issue,
-        model_id: Number(b.dataset.model)
-      });
-      $("print-clear").hidden = false;
-    } catch (error) {
-      $("print-status").textContent = error.message;
-    }
-  });
-  listen($("print-form"), "submit", async (e) => {
-    e.preventDefault();
-    if (job || getState().busy || !getState().models.length) return;
-    const controller = new window2.AbortController();
-    job = controller;
-    report = null;
-    clear();
-    $("print-results").replaceChildren();
-    $("print-status").textContent = "Checking on your device\u2026";
-    $("print-fields").disabled = true;
-    $("print-run").disabled = true;
-    $("print-cancel").hidden = false;
-    try {
-      let profile = null;
-      if ($("print-fdm").checked) {
-        profile = { technology: "fdm" };
-        if ($("print-wall").value)
-          profile.min_wall_mm = Number($("print-wall").value);
-        if ($("print-angle").value)
-          profile.overhang_degrees = Number($("print-angle").value);
-        const bed = ["x", "y", "z"].map((a) => $("print-bed-" + a).value);
-        if (bed.some(Boolean)) {
-          if (!bed.every(Boolean))
-            throw new Error(
-              "Enter all three build-volume dimensions, or leave all three empty."
-            );
-          profile.build_volume_mm = bed.map(Number);
-        }
-      }
-      scopeKey = key();
-      for (const id of stateIds()) {
-        if (getViewer().get_model_animation_state(id)?.status === "running") {
-          getViewer().pause_model_animation(id);
-          pausedForCheck.add(id);
-        }
-      }
-      sync();
-      const result = await getViewer().check_printability({
-        model_ids: stateIds(),
-        level: $("print-level").value,
-        units_confirmed: $("print-units").checked,
-        profile,
-        signal: controller.signal,
-        on_progress: (p) => {
-          if (job === controller)
-            $("print-status").textContent = `${p.phase} \xB7 model ${(p.model_index ?? 0) + 1} of ${p.total_models}`;
-        }
-      });
-      if (disposed || controller.signal.aborted) return;
-      report = result;
-      render(report);
-      $("print-status").textContent = summary[report.summary];
-      announce(summary[report.summary]);
-    } catch (error) {
-      if (!disposed)
-        $("print-status").textContent = error.name === "AbortError" ? "Check cancelled. Your model is unchanged." : error.message;
-    } finally {
-      if (job === controller) job = null;
-      if (!disposed) {
-        $("print-fields").disabled = false;
-        $("print-run").disabled = false;
-        $("print-cancel").hidden = true;
-        sync();
-      }
-    }
-  });
-  sync();
-  return {
-    sync,
-    close,
-    dispose() {
-      disposed = true;
-      close(false);
-      report = null;
-      pausedForCheck.clear();
-    }
-  };
-}
-
-// src/app-animation.js
-var animationControls = [
-  "animation-details",
-  "animation-fields",
-  "animation-axis",
-  "animation-seconds",
-  "animation-direction",
-  "animation-play",
-  "animation-pause",
-  "animation-stop",
-  "animation-status",
-  "animation-error"
-];
+// src/session.js
 var axes4 = ["x", "y", "z"];
-function syncAnimatedRecord(record, model) {
-  if (!record || !model?.geometry) return;
-  record.bounds = Object.fromEntries(
-    ["min", "max"].map((key) => [
-      key,
-      model.geometry.bounds[key].map(
-        (v, i) => (v - model.center[i]) * model.scaleVector[i]
-      )
-    ])
-  );
-  record.rotation = Object.fromEntries(
-    axes4.map((a) => [a, model["rotation" + a] * 180 / Math.PI % 360])
-  );
-  record.position = { x: 0, y: 0, z: 0 };
-  const offset = enginePosition(record);
-  for (const a of axes4) record.position[a] = model[a] - offset[a];
-}
-function centerAnimationPivot(record, model) {
-  syncAnimatedRecord(record, model);
-  const center = model.geometry.bounds.min.map(
-    (v, i) => (v + model.geometry.bounds.max[i]) / 2
-  );
-  const delta = center.map(
-    (v, i) => (v - model.center[i]) * model.scaleVector[i]
-  );
-  const rotation2 = rotationMatrix(record.rotation);
-  const original = record.originalPosition || { x: 0, y: 0, z: 0 };
-  record.originalPosition = Object.fromEntries(
-    axes4.map((a, i) => [a, original[a] + delta[i]])
-  );
-  for (let i = 0; i < 3; i++)
-    model[axes4[i]] += delta.reduce(
-      (sum, v, j) => sum + rotation2[i * 3 + j] * v,
-      0
-    );
-  model.center = center;
-  record.animationPivot = true;
-  syncAnimatedRecord(record, model);
-}
-function spinDefinition(axis, seconds, direction) {
-  if (!axes4.includes(axis) || !Number.isFinite(seconds) || seconds < 0.1 || seconds > 3600 || !["1", "-1"].includes(direction))
-    throw new Error("Choose an axis and a duration from 0.1 to 3,600 seconds.");
-  return {
-    delta: {
-      ["rotation" + axis]: 2 * Math.PI * Number(direction),
-      msec: seconds * 1e3,
-      loop: true
-    }
-  };
-}
-function bindAppAnimation({
-  $,
-  listen,
-  window: window2,
-  getState,
-  getViewer,
-  beforePlay,
-  refreshPose,
-  announce
-}) {
-  const settings = /* @__PURE__ */ new Map();
-  let selected = null, timer = null, disposed = false;
-  const state = () => {
-    const s = getState();
-    return {
-      ...s,
-      playback: s.selectedId == null ? null : getViewer()?.get_model_animation_state(s.selectedId)
-    };
-  };
-  function sync() {
-    if (disposed) return;
-    const s = state(), available = s.models.some((m) => m.id === s.selectedId);
-    for (const id of settings.keys())
-      if (!s.models.some((m) => m.id === id)) settings.delete(id);
-    $("animation-details").hidden = !available;
-    $("animation-fields").disabled = s.busy || !available;
-    if (selected !== s.selectedId) {
-      selected = s.selectedId;
-      let value = settings.get(selected);
-      if (!value) {
-        value = { axis: "z", seconds: 5, direction: "1" };
-        const a = getViewer()?._models.get(selected)?.animation;
-        const entries = Object.entries(a?.delta || {}).filter(
-          ([k, v]) => k.startsWith("rotation") && v !== 0
-        );
-        if (a?.delta?.loop && !a.exact && entries.length === 1) {
-          value = {
-            axis: entries[0][0].slice(-1),
-            seconds: a.delta.msec * 2 * Math.PI / Math.abs(entries[0][1]) / 1e3,
-            direction: entries[0][1] < 0 ? "-1" : "1"
-          };
-        }
-        settings.set(selected, value);
-      }
-      $("animation-axis").value = value.axis;
-      $("animation-seconds").value = value.seconds;
-      $("animation-direction").value = value.direction;
-      $("animation-error").hidden = true;
-    }
-    const status = s.playback?.status || "idle", active = ["running", "paused"].includes(status);
-    $("animation-play").textContent = active ? "Restart spin" : "Play";
-    $("animation-pause").textContent = status === "paused" ? "Resume" : "Pause";
-    $("animation-pause").disabled = !active;
-    $("animation-stop").disabled = !active;
-    const label = {
-      idle: "Ready",
-      running: "Playing",
-      paused: "Paused",
-      stopped: "Stopped",
-      completed: "Finished"
-    }[status];
-    const text = `${label}. ${active ? "Stop keeps the current pose." : "Spin the selected model around its center."}`;
-    if ($("animation-status").textContent !== text)
-      $("animation-status").textContent = text;
-    if (status === "running" && !timer)
-      timer = window2.setInterval(() => {
-        if (!disposed && !window2.document.hidden) refreshPose();
-      }, 250);
-    if (status !== "running" && timer) {
-      window2.clearInterval(timer);
-      timer = null;
-    }
+var formats = /\.(stl|obj|3mf|step|stp|iges|igs|vsb|vsj)$/i;
+var zero = () => ({ x: 0, y: 0, z: 0 });
+var failure = (code, message) => Object.assign(new Error(message), { code });
+var ViewerSession = class {
+  constructor(container, options = {}) {
+    if (options.viewer_options?.models)
+      throw new TypeError("Use session.openFiles/openURL for initial models");
+    if (options.viewer_options?.allow_drag_and_drop)
+      throw new TypeError("Pass dropped files to session.openFiles");
+    this._container = container;
+    this._options = options;
+    this._policy = memoryPolicy(options.device_memory);
+    for (const key of Object.keys(this._policy.limits))
+      if (options.viewer_options?.[key] !== void 0)
+        this._policy.limits[key] = options.viewer_options[key];
+    this._policy.budget = this._policy.limits.max_memory_bytes;
+    this._records = /* @__PURE__ */ new Map();
+    this._queue = [];
+    this._generation = 0;
+    this._nextID = 0;
+    this._loadingID = null;
+    this._viewer = null;
+    this._viewerPromise = null;
+    this._drainPromise = null;
+    this._busy = false;
+    this._disposed = false;
+    this._arrangement = "original";
+    this._grid = { enabled: false, spacing: 1, height: 0 };
+    this._bindings = /* @__PURE__ */ new Set();
   }
-  function play(keepPaused = false) {
-    const s = state();
-    if (s.busy || s.selectedId == null) return;
+  get viewer() {
+    return this._viewer;
+  }
+  get busy() {
+    return this._busy;
+  }
+  get arrangement() {
+    return this._arrangement;
+  }
+  get grid() {
+    return { ...this._grid };
+  }
+  get memoryPolicy() {
+    return { ...this._policy, limits: { ...this._policy.limits } };
+  }
+  _assertActive() {
+    if (this._disposed) throw new Error("ViewSTL session is disposed");
+  }
+  _emit(event) {
+    if (!this._disposed) this._call(this._options.on_event, event);
+  }
+  _call(callback, ...args) {
     try {
-      const value = {
-        axis: $("animation-axis").value,
-        seconds: $("animation-seconds").valueAsNumber,
-        direction: $("animation-direction").value
-      };
-      const definition = spinDefinition(
-        value.axis,
-        value.seconds,
-        value.direction
-      );
-      beforePlay(s.selectedId);
-      getViewer().animate_model(s.selectedId, definition);
-      if (keepPaused && s.playback?.status === "paused")
-        getViewer().pause_model_animation(s.selectedId);
-      settings.set(s.selectedId, value);
-      $("animation-error").hidden = true;
-      announce(
-        keepPaused && s.playback?.status === "paused" ? "Spin updated. Still paused." : "Animation playing."
-      );
-      sync();
+      callback?.(...args);
     } catch (error) {
-      $("animation-error").textContent = error.message;
-      $("animation-error").hidden = false;
+      console.error(error);
     }
   }
-  listen($("animation-play"), "click", () => play());
-  listen($("animation-pause"), "click", () => {
-    const s = state();
-    if (s.busy || s.selectedId == null) return;
-    getViewer()[s.playback?.status === "paused" ? "resume_model_animation" : "pause_model_animation"](s.selectedId);
-    sync();
-  });
-  listen($("animation-stop"), "click", () => {
-    const s = state();
-    if (!s.busy && s.selectedId != null)
-      getViewer().animate_model(s.selectedId, null);
-    sync();
-  });
-  for (const id of [
-    "animation-axis",
-    "animation-seconds",
-    "animation-direction"
-  ])
-    listen($(id), "change", () => {
-      if (["running", "paused"].includes(state().playback?.status)) play(true);
-      else
-        settings.set(selected, {
-          axis: $("animation-axis").value,
-          seconds: $("animation-seconds").valueAsNumber,
-          direction: $("animation-direction").value
-        });
-    });
-  sync();
-  return {
-    sync,
-    dispose() {
-      disposed = true;
-      window2.clearInterval(timer);
-      settings.clear();
-    }
-  };
-}
-
-// src/app.js
-var mountedRoots = /* @__PURE__ */ new WeakMap();
-var requiredControls = [
-  "background-color",
-  "background-value",
-  "cancel-load",
-  "clear-scene",
-  "close-colors",
-  "close-info",
-  "close-model",
-  "close-scene",
-  "close-section",
-  "close-view",
-  "color-mode-note",
-  "colors-button",
-  "colors-panel",
-  "depth-controls",
-  "depth-model-button",
-  "dismiss-notice",
-  "drop-message",
-  "drop-overlay",
-  "empty-state",
-  "file-heading",
-  "file-input",
-  "filename",
-  "finish-move",
-  "fit-button",
-  "grid-button",
-  "image-button",
-  "info-button",
-  "info-dimensions",
-  "info-panel",
-  "info-size",
-  "info-triangles",
-  "live-status",
-  "loading-label",
-  "loading-state",
-  "memory-budget",
-  "model-color",
-  "model-color-value",
-  "model-controls",
-  "model-list",
-  "model-tool",
-  "move-controls",
-  "move-gesture-message",
-  "move-mode",
-  "move-mode-name",
-  "move-model-button",
-  "notice",
-  "notice-message",
-  "open-label",
-  "position-details",
-  "position-error",
-  "position-units",
-  "position-x",
-  "position-y",
-  "position-z",
-  "reset-position",
-  "reset-rotation",
-  "restore-color",
-  "rotate-controls",
-  "rotate-model-button",
-  "rotation-error",
-  "rotation-x",
-  "rotation-y",
-  "rotation-z",
-  "sample-button",
-  "scene-arrangement",
-  "scene-button",
-  "scene-count",
-  "scene-panel",
-  "section-axis",
-  "section-button",
-  "section-enabled",
-  "section-flip",
-  "section-panel",
-  "section-position",
-  "section-value",
-  "smooth-shading",
-  "unit-note",
-  "view-button",
-  "view-description",
-  "view-label",
-  "view-panel",
-  "view-status",
-  "viewer",
-  "workspace"
-];
-function mountViewstlApp(root, options = {}) {
-  if (!root?.querySelectorAll)
-    throw new TypeError("A Document or HTMLElement root is required");
-  if (mountedRoots.has(root))
-    throw new Error("ViewSTL app is already mounted on this root");
-  const document2 = root.ownerDocument || root;
-  const window2 = document2.defaultView;
-  const URL2 = window2.URL;
-  const controls = new Map(
-    [...root.querySelectorAll("[id]")].map((el) => [el.id, el])
-  );
-  const $ = (id) => controls.get((options.id_prefix || "") + id);
-  const missing = requiredControls.filter((id) => !$(id));
-  if (exportControls.some((id) => $(id)))
-    missing.push(...exportControls.filter((id) => !$(id)));
-  if (printControls.some((id) => $(id)))
-    missing.push(...printControls.filter((id) => !$(id)));
-  if (animationControls.some((id) => $(id)))
-    missing.push(...animationControls.filter((id) => !$(id)));
-  if (toolsControls.some((id) => $(id)))
-    missing.push(...toolsControls.filter((id) => !$(id)));
-  if (missing.length)
-    throw new Error("Missing ViewSTL controls: " + missing.join(", "));
-  const abort = new window2.AbortController();
-  const dropTarget = root === document2 ? window2 : root;
-  let disposed = false, drainPromise = null, lastLoadedID = null;
-  const assertActive = () => {
-    if (disposed) throw new Error("ViewSTL app is disposed");
-  };
-  const listen = (target, type, handler, options2 = {}) => target.addEventListener(type, handler, {
-    ...options2,
-    signal: abort.signal
-  });
-  const policy = memoryPolicy(window2.navigator.deviceMemory);
-  const panelNames = ["view", "section", "info", "scene", "colors"];
-  const records = /* @__PURE__ */ new Map(), queue = [];
-  const palette = [
-    "#64a5b2",
-    "#dd766b",
-    "#edb14c",
-    "#7ca984",
-    "#927fbc",
-    "#5a8ec7",
-    "#89949d"
-  ];
-  let viewerPromise, viewer, generation = 0, appearanceRequest = 0, modelID = null, nextID = 0, loadingID = null;
-  let exportUI;
-  let printUI;
-  let animationUI;
-  let toolsUI;
-  let sceneImport;
-  let draining = false, busy = false, gridEnabled = false, gridHeight = 0, gridSpacing = 1, moveMode = false, selectionMode = false, transformTool = "move", modelMover, dragArrangement, background = "transparent";
-  const viewNames = {
-    flat: "Solid",
-    edges: "Solid + edges",
-    wireframe: "Wireframe",
-    xray: "X-ray",
-    mesh: "Mesh overlay",
-    studio: "Studio",
-    orientation: "Face orientation"
-  };
-  const modeInputs = [...root.querySelectorAll('[name="view-mode"]')];
-  const shortcutButtons = [...root.querySelectorAll("[data-viewstl-shortcut]")];
-  if (options.id_prefix)
-    modeInputs.forEach(
-      (input) => input.name = options.id_prefix + "view-mode"
-    );
-  const sampleURL = options.sample_url;
-  const formatNumber = new Intl.NumberFormat(void 0, {
-    maximumFractionDigits: 2
-  });
-  function announce(text) {
-    if (disposed) return;
-    $("live-status").textContent = text;
+  _setBusy(value) {
+    this._busy = value;
+    this._emit({ type: "busy", busy: value });
   }
-  function showNotice(text) {
-    if (disposed) return;
-    $("notice-message").textContent = text;
-    $("notice").hidden = false;
-  }
-  function syncSelection() {
-    viewer?.set_selection(
-      !busy && records.has(modelID) && (selectionMode || moveMode || !$("scene-panel").hidden) ? modelID : null
-    );
-  }
-  function syncShortcuts() {
-    for (const button of shortcutButtons) {
-      const action = button.dataset.viewstlShortcut;
-      button.disabled = busy || !records.size || action === "save" && !exportUI;
-      if (action === "select")
-        button.setAttribute("aria-pressed", String(selectionMode));
-    }
-  }
-  function setSelectionMode(enabled) {
-    selectionMode = !!enabled && !busy && records.size > 0;
-    $("workspace").classList.toggle("selecting-model-mode", selectionMode);
-    setMoveMode(selectionMode, "move", true);
-    syncShortcuts();
-  }
-  function editModelAt(event) {
-    const hit = viewer.pick_model(event.clientX, event.clientY);
-    if (!hit || !records.has(hit.id)) return;
-    event.preventDefault();
-    selectModel(hit.id);
-    closePanels();
-    $("scene-panel").hidden = false;
-    $("scene-button").setAttribute("aria-expanded", "true");
-    $("position-details").open = true;
-    syncSelection();
-    announce(
-      records.get(hit.id).name + " selected. Choose Move, Rotate or Depth."
-    );
-  }
-  function closePanel(name) {
-    $(name + "-panel").hidden = true;
-    $(name + "-button").setAttribute("aria-expanded", "false");
-    syncSelection();
-  }
-  function closePanels() {
-    panelNames.forEach(closePanel);
-  }
-  function togglePanel(name) {
-    const open = $(name + "-panel").hidden;
-    closePanels();
-    $(name + "-panel").hidden = !open;
-    $(name + "-button").setAttribute("aria-expanded", String(open));
-    syncSelection();
-    if (open && name === "info") populateInfo();
-    if (open && (name === "scene" || name === "view")) toolsUI?.sync();
-  }
-  function fileSize(size) {
-    return size == null ? "Sample model" : size < 1024 ** 2 ? `${formatNumber.format(size / 1024)} KiB` : size < 1024 ** 3 ? `${formatNumber.format(size / 1024 ** 2)} MiB` : `${formatNumber.format(size / 1024 ** 3)} GiB`;
-  }
-  function syncColors() {
-    const record = records.get(modelID), color = /^#[a-f0-9]{6}$/i.test(record?.color) ? record.color : "#ffffff";
-    $("model-color").value = color;
-    $("model-color-value").textContent = record?.color === null ? "File colors" : color.toUpperCase();
-    $("restore-color").textContent = record?.embedded ? "Restore file colors" : "Restore original color";
-    root.querySelectorAll("[data-model-color]").forEach(
-      (b) => b.setAttribute(
-        "aria-pressed",
-        String(b.dataset.modelColor === record?.color)
-      )
-    );
-    root.querySelectorAll("[data-background]").forEach(
-      (b) => b.setAttribute(
-        "aria-pressed",
-        String(b.dataset.background === background)
-      )
-    );
-    $("background-color").value = background === "transparent" ? "#fafbfb" : background;
-    $("background-value").textContent = background === "transparent" ? "Default" : background.toUpperCase();
-  }
-  function syncControls() {
-    syncAnimatedRecord(records.get(modelID), viewer?._models.get(modelID));
-    const info = modelID === null ? null : viewer.get_model_info(modelID, { measurements: false }), mode = info?.display === "smooth" ? "flat" : info?.display || "flat";
-    for (const input of modeInputs) {
-      input.checked = input.value === mode;
-      input.disabled = busy;
-    }
-    $("view-label").textContent = toolsUI ? "View" : viewNames[mode];
-    $("view-button").title = "View \xB7 " + viewNames[mode];
-    $("smooth-shading").checked = info?.smooth_shading || false;
-    $("smooth-shading").disabled = busy || mode === "wireframe";
-    $("view-status").textContent = mode === "wireframe" ? "Smooth shading is available in surface views." : "Shading changes the appearance, not the geometry.";
-    const text = mode === "orientation" ? "Blue: front faces \xB7 Red: back faces" : "";
-    $("view-description").textContent = text;
-    $("view-description").hidden = !text;
-    $("color-mode-note").hidden = mode !== "orientation";
-    const section = info?.section;
-    $("section-enabled").checked = !!section;
-    $("section-axis").value = section?.axis || "z";
-    $("section-position").value = (section?.position ?? 0.5) * 100;
-    $("section-value").textContent = $("section-position").value + "%";
-    $("section-flip").setAttribute(
-      "aria-pressed",
-      String(section?.flip || false)
-    );
-    $("section-button").setAttribute("aria-pressed", String(!!section));
-    root.querySelectorAll("[data-selected-name]").forEach((el) => el.textContent = records.get(modelID)?.name || "");
-    syncColors();
-    syncPosition();
-    exportUI?.sync();
-    printUI?.sync();
-    animationUI?.sync();
-    toolsUI?.sync();
-    syncShortcuts();
-  }
-  function populateInfo() {
-    if (modelID === null) return;
-    const info = viewer.get_model_info(modelID, { measurements: false }), record = records.get(modelID), factor = viewer.display_units === "inch" ? 25.4 : 1;
-    $("info-triangles").textContent = info.triangles.toLocaleString();
-    $("info-dimensions").textContent = [info.dims.x, info.dims.y, info.dims.z].map((x) => formatNumber.format(x / factor)).join(" \xD7 ") + (factor === 1 ? " mm" : " in");
-    $("info-size").textContent = fileSize(record.size);
-    const size = viewer.get_model_size(modelID);
-    $("unit-note").textContent = size.editable ? "File coordinates interpreted as " + (size.file_units === "inch" ? "inches." : "millimetres (assumed).") + " Change file units in Models \u2192 Size & units." : "Explicit file units were converted to millimetres on import.";
-    toolsUI?.syncInfo();
-  }
-  function renderList() {
-    $("model-list").replaceChildren(
-      ...[...records.values()].map((record) => {
-        const row = document2.createElement("li"), color = document2.createElement("button"), pick = document2.createElement("button"), remove = document2.createElement("button");
-        row.className = "model-row";
-        row.classList.toggle("selected", record.id === modelID);
-        color.className = "model-swatch";
-        color.dataset.colorModel = record.id;
-        color.style.backgroundColor = record.color || "#b7c5c9";
-        color.setAttribute("aria-label", "Color for " + record.name);
-        color.title = "Change color";
-        pick.className = "model-pick";
-        pick.dataset.selectModel = record.id;
-        pick.textContent = record.name;
-        pick.title = record.name;
-        pick.setAttribute("aria-pressed", String(record.id === modelID));
-        remove.className = "icon-button";
-        remove.dataset.removeModel = record.id;
-        remove.textContent = "\xD7";
-        remove.setAttribute("aria-label", "Remove " + record.name);
-        row.append(color, pick, remove);
-        return row;
-      })
-    );
-    $("scene-count").textContent = records.size;
-    $("scene-arrangement").disabled = records.size === 0;
-  }
-  function renderScene() {
-    const has = records.size > 0;
-    if (!has && selectionMode) setSelectionMode(false);
-    $("workspace").classList.toggle("has-models", has);
-    $("viewer").hidden = !has && !busy;
-    $("empty-state").hidden = has || busy;
-    $("file-heading").hidden = !has;
-    $("model-controls").hidden = !has;
-    $("filename").textContent = records.get(modelID)?.name || "";
-    $("filename").title = $("filename").textContent;
-    $("open-label").textContent = has ? "Add models" : "Open files";
-    $("drop-message").textContent = has ? "Add to your scene." : "Drop it here.";
-    renderList();
-    syncControls();
-    populateInfo();
-    if (!has) closePanels();
-    syncSelection();
-  }
-  function setBusy(value) {
-    if (value) exportUI?.close();
-    if (disposed) return;
-    if (value && selectionMode) setSelectionMode(false);
-    if (value) setMoveMode(false);
-    busy = value;
-    $("loading-state").hidden = !value;
-    $("workspace").setAttribute("aria-busy", String(value));
-    renderScene();
-  }
-  function selectModel(id) {
-    exportUI?.close();
-    if (!records.has(id)) return;
-    if (selectionMode) modelMover?.setEnabled(false);
-    else setMoveMode(false);
-    appearanceRequest++;
-    modelID = id;
-    renderScene();
-    if (selectionMode) setMoveMode(true, transformTool, true);
-  }
-  function placements() {
-    return scenePlacement([...records.values()], $("scene-arrangement").value);
-  }
-  function updateGrid() {
-    viewer?.set_infinite_grid(gridEnabled, gridSpacing, gridHeight);
-    $("grid-button").setAttribute("aria-pressed", String(gridEnabled));
-  }
-  function arrangeScene() {
-    setMoveMode(false);
-    for (const record of records.values())
-      syncAnimatedRecord(record, viewer?._models.get(record.id));
-    if ($("scene-arrangement").value === "custom") return;
-    for (const record of records.values()) prepareManual(record.id);
-    if ($("scene-arrangement").value === "original")
-      for (const record of records.values())
-        record.rotation = {
-          ...record.originalRotation || { x: 0, y: 0, z: 0 }
-        };
-    const positions = placements();
-    for (const p of positions) {
-      records.get(p.id).position = { x: p.x, y: p.y, z: p.z };
-      renderTransform(records.get(p.id));
-    }
-    if ($("scene-arrangement").value !== "custom" || !records.size)
-      gridHeight = sceneFloor([...records.values()], positions);
-    syncPosition();
-    updateGrid();
-    viewer?.set_auto_zoom();
-  }
-  function syncPosition(preserveFocus = false) {
-    const record = records.get(modelID);
-    for (const axis of ["x", "y", "z"]) {
-      const input = $("position-" + axis);
-      if (!preserveFocus || document2.activeElement !== input)
-        input.value = Number((record?.position?.[axis] || 0).toPrecision(12));
-      input.disabled = !record;
-      input.removeAttribute("aria-invalid");
-    }
-    $("position-error").hidden = true;
-    $("position-units").textContent = record?.animationPivot ? "Position of the model center in the scene, in mm." : "Offset from file coordinates, in mm.";
-    $("move-model-button").disabled = !record || busy;
-    $("reset-position").disabled = !record;
-    syncRotation(preserveFocus);
-    for (const id of [
-      "rotate-model-button",
-      "depth-model-button",
-      "depth-nearer",
-      "depth-farther"
-    ])
-      $(id).disabled = !record || busy;
-  }
-  function applyPosition(id, position, refreshInputs = true) {
-    if (!records.has(id) || !Object.values(position).every(
-      (v) => Number.isFinite(v) && Math.abs(v) <= 1e12
-    ))
-      return false;
-    records.get(id).position = { ...position };
-    renderTransform(records.get(id));
-    $("scene-arrangement").value = "custom";
-    if (id === modelID && refreshInputs) syncPosition();
-    return true;
-  }
-  function renderTransform(record) {
-    const p = enginePosition(record), r = record.rotation;
-    viewer.set_rotation(
-      record.id,
-      ...["x", "y", "z"].map((axis) => r[axis] % 360 * Math.PI / 180)
-    );
-    viewer.set_position(record.id, p.x, p.y, p.z);
-  }
-  function selectedTransform() {
-    prepareManual(modelID);
-    const record = records.get(modelID);
-    return record ? { ...record, center: modelCenter(record), radius: modelRadius(record) } : null;
-  }
-  function syncRotation(preserveFocus = false) {
-    const record = records.get(modelID);
-    for (const axis of ["x", "y", "z"]) {
-      const input = $("rotation-" + axis);
-      if (!preserveFocus || document2.activeElement !== input)
-        input.value = Number((record?.rotation?.[axis] || 0).toPrecision(10));
-      input.disabled = !record;
-      input.removeAttribute("aria-invalid");
-    }
-    $("rotation-error").hidden = true;
-    $("reset-rotation").disabled = !record;
-  }
-  function applyRotation(id, rotation2, refreshInputs = true) {
-    if (!records.has(id) || !Object.values(rotation2).every(
-      (v) => Number.isFinite(v) && Math.abs(v) <= 36e4
-    ))
-      return false;
-    records.get(id).rotation = { ...rotation2 };
-    renderTransform(records.get(id));
-    $("scene-arrangement").value = "custom";
-    if (refreshInputs && id === modelID) syncRotation();
-    return true;
-  }
-  const toolLabels = { move: "Move", rotate: "Rotate", depth: "Depth" };
-  const toolHints = {
-    move: "Drag to move the selected model",
-    rotate: "Drag to rotate the selected model",
-    depth: "Drag up for nearer, down for farther"
-  };
-  function syncTool() {
-    if (viewer?.canvas) viewer.canvas.dataset.modelTool = transformTool;
-    root.querySelectorAll("[data-transform-tab]").forEach(
-      (b) => b.setAttribute(
-        "aria-pressed",
-        String(b.dataset.transformTab === transformTool)
-      )
-    );
-    for (const name of ["move", "rotate", "depth"]) {
-      $(name + "-controls").hidden = name !== transformTool;
-      $(name + "-model-button").setAttribute(
-        "aria-pressed",
-        String(moveMode && name === transformTool)
-      );
-    }
-    $("model-tool").value = transformTool;
-    $("move-gesture-message").textContent = (selectionMode ? "Click a model to select \xB7 " : "") + toolHints[transformTool] + " \xB7 Scroll to adjust depth";
-  }
-  function setMoveMode(enabled, tool = transformTool, retainPaused = false) {
-    modelMover?.setEnabled(false);
-    transformTool = tool;
-    moveMode = !!enabled && modelID !== null && !busy;
-    if (!moveMode && selectionMode) {
-      selectionMode = false;
-      $("workspace").classList.remove("selecting-model-mode");
-    }
-    if (viewer) viewer.controls.enabled = !selectionMode;
-    syncShortcuts();
-    if (moveMode && !retainPaused) prepareManual(modelID);
-    modelMover?.setEnabled(moveMode);
-    syncTool();
-    $("move-mode").hidden = !moveMode;
-    $("move-mode-name").textContent = records.get(modelID)?.name || "";
-    $("workspace").classList.toggle("moving-model-mode", moveMode);
-    if (viewer?.canvas)
-      viewer.canvas.setAttribute(
-        "aria-label",
-        moveMode ? (selectionMode ? "Click a model to select. " : "") + toolHints[transformTool] + ". Scroll changes only its depth. Escape exits." : "3D model viewer. Drag to rotate, shift-drag to pan, scroll to zoom."
-      );
-    if (moveMode) {
-      closePanels();
-      viewer.canvas.focus({ preventScroll: true });
-      announce(
-        toolLabels[transformTool] + " tool for " + records.get(modelID).name + ". Done or Escape returns to viewing."
-      );
-    }
-    syncSelection();
-  }
-  for (const axis of ["x", "y", "z"]) {
-    const input = $("rotation-" + axis);
-    listen(input, "input", () => {
-      if (modelID === null || !input.value.trim()) return;
-      prepareManual(modelID);
-      if (applyRotation(
-        modelID,
-        { ...records.get(modelID).rotation, [axis]: input.valueAsNumber },
-        false
-      )) {
-        input.removeAttribute("aria-invalid");
-        $("rotation-error").hidden = true;
-      }
-    });
-    listen(input, "change", () => {
-      if (modelID === null) return;
-      prepareManual(modelID);
-      if (!input.value.trim() || !applyRotation(modelID, {
-        ...records.get(modelID).rotation,
-        [axis]: input.valueAsNumber
-      })) {
-        input.setAttribute("aria-invalid", "true");
-        $("rotation-error").hidden = false;
-      } else announce("Model rotation updated.");
+  _error(error, source) {
+    this._emit({
+      type: "error",
+      code: error.code || "load-failed",
+      message: error.message,
+      source: source?.name
     });
   }
-  listen($("reset-rotation"), "click", () => {
-    setMoveMode(false);
-    if (modelID !== null) {
-      prepareManual(modelID);
-      applyRotation(modelID, {
-        ...records.get(modelID).originalRotation || { x: 0, y: 0, z: 0 }
-      });
-      announce("Selected model rotation reset.");
-    }
-  });
-  for (const name of ["move", "rotate", "depth"])
-    listen(
-      $(name + "-model-button"),
-      "click",
-      () => setMoveMode(!moveMode || transformTool !== name, name)
-    );
-  for (const [id, amount] of [
-    ["depth-nearer", -0.12],
-    ["depth-farther", 0.12]
-  ])
-    listen($(id), "click", () => {
-      const model = selectedTransform();
-      if (!model) return;
-      applyPosition(
-        model.id,
-        depthPosition(model, viewer.get_camera_state(), amount)
-      );
-      announce(
-        amount < 0 ? "Selected model moved nearer." : "Selected model moved farther."
-      );
-    });
-  root.querySelectorAll("[data-transform-tab]").forEach(
-    (b) => listen(
-      b,
-      "click",
-      () => setMoveMode(selectionMode, b.dataset.transformTab, true)
-    )
-  );
-  listen(
-    $("model-tool"),
-    "change",
-    () => setMoveMode(true, $("model-tool").value, selectionMode)
-  );
-  for (const axis of ["x", "y", "z"]) {
-    const input = $("position-" + axis);
-    listen(input, "input", () => {
-      if (modelID === null || !input.value.trim()) return;
-      prepareManual(modelID);
-      if (applyPosition(
-        modelID,
-        { ...records.get(modelID).position, [axis]: input.valueAsNumber },
-        false
-      )) {
-        input.removeAttribute("aria-invalid");
-        $("position-error").hidden = true;
-      }
-    });
-    listen(input, "change", () => {
-      if (modelID === null) return;
-      prepareManual(modelID);
-      if (!input.value.trim() || !applyPosition(modelID, {
-        ...records.get(modelID).position,
-        [axis]: input.valueAsNumber
-      })) {
-        input.setAttribute("aria-invalid", "true");
-        $("position-error").hidden = false;
-      } else announce("Model position updated.");
-    });
-  }
-  listen($("finish-move"), "click", () => {
-    setMoveMode(false);
-    viewer?.canvas.focus({ preventScroll: true });
-  });
-  listen($("reset-position"), "click", () => {
-    setMoveMode(false);
-    if (modelID !== null) {
-      prepareManual(modelID);
-      applyPosition(modelID, {
-        ...records.get(modelID).originalPosition || { x: 0, y: 0, z: 0 }
-      });
-      announce("Selected model restored to its original position.");
-    }
-  });
-  listen(window2, "blur", () => {
-    if (moveMode) setMoveMode(false);
-  });
-  function cancelLoading() {
-    generation++;
-    queue.length = 0;
-    sceneImport?.abort();
-    if (loadingID !== null) {
-      viewer?.remove_model(loadingID);
-      loadingID = null;
-    }
-    setBusy(false);
-    announce("Opening cancelled.");
-  }
-  function clearScene() {
-    exportUI?.close();
-    setMoveMode(false);
-    cancelLoading();
-    appearanceRequest++;
-    viewer?.clean();
-    records.clear();
-    modelID = null;
-    gridEnabled = false;
-    gridHeight = 0;
-    gridSpacing = 1;
-    $("scene-arrangement").value = "original";
-    updateGrid();
-    $("notice").hidden = true;
-    renderScene();
-    announce("Scene cleared.");
-  }
-  function removeModel(id) {
-    if (!records.has(id)) return;
-    exportUI?.close();
-    const name = records.get(id).name;
-    setMoveMode(false);
-    viewer.remove_model(id);
-    records.delete(id);
-    appearanceRequest++;
-    if (modelID === id) modelID = [...records.keys()].at(-1) ?? null;
-    arrangeScene();
-    renderScene();
-    announce(name + " removed.");
-  }
-  function prepareManual(id) {
-    if (!records.has(id)) return;
-    syncAnimatedRecord(records.get(id), viewer?._models.get(id));
-    viewer?.animate_model(id, null);
-  }
-  function refreshAnimatedPose() {
-    if (disposed || modelID === null) return;
-    syncAnimatedRecord(records.get(modelID), viewer?._models.get(modelID));
-    if (!$("info-panel").hidden) populateInfo();
-    if (!$("scene-panel").hidden && $("position-details").open)
-      syncPosition(true);
-  }
-  function animationChanged(id, state, reason) {
-    if (disposed) return;
-    if (reason === "restored" && state.status === "running" && window2.matchMedia?.("(prefers-reduced-motion: reduce)").matches)
-      viewer.pause_model_animation(id);
-    syncAnimatedRecord(records.get(id), viewer?._models.get(id));
-    if (["started", "restored", "resumed"].includes(reason))
-      $("scene-arrangement").value = "custom";
-    if (id === modelID) refreshAnimatedPose();
-    animationUI?.sync();
-    printUI?.sync();
-    options.animation_state_callback?.(id, state, reason);
-  }
-  async function getViewer() {
-    if (!viewerPromise)
-      viewerPromise = Promise.resolve().then(async () => {
-        if (disposed) throw new Error("ViewSTL app is disposed");
-        viewer = new StlViewer($("viewer"), {
-          ...policy.limits,
+  async ready() {
+    this._assertActive();
+    if (!this._viewerPromise) {
+      this._viewerPromise = Promise.resolve().then(async () => {
+        this._assertActive();
+        const supplied = this._options.viewer_options || {};
+        const viewer = this._viewer = new StlViewer(this._container, {
+          ...this._policy.limits,
           worker_count: 1,
-          worker_timeout: options.worker_timeout ?? 6e5,
-          worker_url: options.worker_url,
-          worker_factory: options.worker_factory,
-          url_import_endpoint: options.url_import_endpoint,
+          worker_timeout: 6e5,
           center_models: false,
-          bg_color: background,
           allow_drag_and_drop: false,
-          animation_state_callback: animationChanged,
-          animation_complete_callback: (...args) => {
-            if (!disposed) options.animation_complete_callback?.(...args);
-          },
-          camera_state: {
-            position: { x: 90, y: -130, z: 90 },
-            target: { x: 0, y: 0, z: 0 },
-            up: { x: 0, y: 0, z: 1 }
-          },
+          ...supplied,
           loading_progress_callback: (status) => {
-            if (disposed || !busy || sceneImport) return;
-            const p = status[loadingID];
-            $("loading-label").textContent = p?.phase === "loading-cad" ? "Loading the CAD reader\u2026" : p?.phase === "parsing-cad" ? "Preparing CAD surfaces\u2026" : p?.loaded && !p.total ? `Downloading your file\u2026 ${fileSize(p.loaded)}` : p?.total && p.loaded < p.total ? `Reading your file\u2026 ${Math.min(99, Math.floor(100 * p.loaded / p.total))}%` : "Preparing your model\u2026";
+            if (this._busy && !this._sceneImport)
+              this._emit({
+                type: "progress",
+                scene: false,
+                progress: status[this._loadingID] || {}
+              });
+            this._call(supplied.loading_progress_callback, status);
           },
           model_loaded_callback: (id) => {
-            lastLoadedID = id;
+            this._lastLoadedID = id;
+            this._call(supplied.model_loaded_callback, id);
           },
           load_error_callback: (message) => {
-            showNotice(
-              /limit exceeded|safety budget/i.test(message) ? `This scene or view mode exceeds the estimated memory budget for this device (${fileSize(policy.budget)}). Remove a model, use Solid view without smoothing, or try a device with more memory.` : `Couldn\u2019t display this model. ${message}`
-            );
+            this._error(new Error(message));
+            this._call(supplied.load_error_callback, message);
+          },
+          animation_state_callback: (id, state, reason) => {
+            if (["started", "restored", "resumed"].includes(reason))
+              this._arrangement = "custom";
+            this._emit({ type: "animation", id, state, reason });
+            this._call(supplied.animation_state_callback, id, state, reason);
+          },
+          animation_complete_callback: (...args) => {
+            if (!this._disposed)
+              this._call(supplied.animation_complete_callback, ...args);
           }
         });
         await viewer.when_ready;
-        if (disposed) throw new Error("ViewSTL app is disposed");
-        modelMover = bindModelMove(viewer.canvas, {
-          getCamera: () => viewer.get_camera_state(),
-          getModel: (event) => {
-            if (selectionMode && event) {
-              const hit = viewer.pick_model(event.clientX, event.clientY);
-              if (!hit || !records.has(hit.id)) return null;
-              if (hit.id !== modelID) selectModel(hit.id);
-            }
-            return selectedTransform();
-          },
-          getTool: () => transformTool,
-          onRotate: (id, rotation2) => applyRotation(id, rotation2),
-          onMove: (id, position) => applyPosition(id, position),
-          onStart: () => {
-            dragArrangement = $("scene-arrangement").value;
-          },
-          onEnd: (id, cancelled) => {
-            if (cancelled) $("scene-arrangement").value = dragArrangement;
-            announce(cancelled ? "Move cancelled." : "Model updated.");
-          }
-        });
-        listen(viewer.canvas, "dblclick", (event) => {
-          if (busy || selectionMode || event.button !== 0) return;
-          editModelAt(event);
-        });
+        this._assertActive();
+        this._emit({ type: "ready" });
         return viewer;
       }).catch((error) => {
-        modelMover?.dispose();
-        modelMover = null;
-        viewer?.dispose();
-        viewer = null;
-        viewerPromise = null;
+        this._viewer?.dispose();
+        this._viewer = null;
+        this._viewerPromise = null;
         throw error;
       });
-    return viewerPromise;
+    }
+    return this._viewerPromise;
   }
-  function addFiles(files) {
-    assertActive();
+  _record(id) {
+    const record = this._records.get(id), model = this._viewer?._models.get(id);
+    if (!record || !model?.geometry) return null;
+    syncAnimatedRecord(record, model);
+    record.color = model.color || (model.geometry.colors ? null : "#909090");
+    return record;
+  }
+  getModel(id) {
+    this._assertActive();
+    const r = this._record(id);
+    if (!r) return null;
+    const { sourceFile, estimated, ...data } = r;
+    return structuredClone({
+      ...data,
+      animation: this._viewer.get_model_animation_state(id),
+      animationDefinition: this._viewer._models.get(id)?.animation || null
+    });
+  }
+  getModels() {
+    this._assertActive();
+    return [...this._records.keys()].map((id) => this.getModel(id)).filter(Boolean);
+  }
+  _adopt(id, source = {}, imported = false) {
+    const m = this._viewer._models.get(id), g = m.geometry;
+    const record = {
+      id,
+      name: source.name || String(m.display_name || m.orig_filename || m.filename).split(/[\\/]/).pop().split(/[?#]/)[0],
+      size: source.size ?? g.file_bytes ?? m.local_file?.size ?? null,
+      units: g.units || m.units || null,
+      embedded: !!g.colors,
+      color: m.color || (g.colors ? null : "#909090"),
+      estimated: g.triangles * 224,
+      sourceFile: source.sourceFile || null
+    };
+    syncAnimatedRecord(record, m);
+    record.originalPosition = imported ? { ...record.position } : zero();
+    record.originalRotation = imported ? { ...record.rotation } : zero();
+    record.originalColor = record.color;
+    this._records.set(id, record);
+  }
+  prepareManual(id) {
+    this._assertActive();
+    if (!this._record(id)) return;
+    this._viewer.animate_model(id, null);
+  }
+  _renderTransform(record) {
+    const p = enginePosition(record), r = record.rotation;
+    this._viewer.set_rotation(
+      record.id,
+      ...axes4.map((a) => r[a] % 360 * Math.PI / 180)
+    );
+    this._viewer.set_position(record.id, p.x, p.y, p.z);
+  }
+  _setTransform(id, kind, value, limit) {
+    this._assertActive();
+    if (!this._records.has(id) || !value || !axes4.every(
+      (a) => Number.isFinite(value[a]) && Math.abs(value[a]) <= limit
+    ))
+      return false;
+    this.prepareManual(id);
+    const record = this._records.get(id);
+    record[kind] = { ...value };
+    this._renderTransform(record);
+    this._arrangement = "custom";
+    return true;
+  }
+  setPosition(id, position) {
+    return this._setTransform(id, "position", position, 1e12);
+  }
+  setRotation(id, degrees) {
+    return this._setTransform(id, "rotation", degrees, 36e4);
+  }
+  centerPivot(id) {
+    this.prepareManual(id);
+    const record = this._records.get(id);
+    if (!record) return;
+    centerAnimationPivot(record, this._viewer._models.get(id));
+    this._arrangement = "custom";
+  }
+  _manipulationModel(id) {
+    this.prepareManual(id);
+    const record = this._record(id);
+    return record ? { ...record, center: modelCenter(record), radius: modelRadius(record) } : null;
+  }
+  moveDepth(id, amount) {
+    if (!Number.isFinite(amount))
+      throw new TypeError("Depth amount must be finite");
+    const model = this._manipulationModel(id);
+    return model ? this.setPosition(
+      id,
+      depthPosition(model, this._viewer.get_camera_state(), amount)
+    ) : false;
+  }
+  bindManipulation(options) {
+    this._assertActive();
+    if (!this._viewer?.ready)
+      throw new Error("Await session.ready() before binding manipulation");
+    let arrangement, disposed = false;
+    const binding = bindModelMove(this._viewer.canvas, {
+      getCamera: () => this._viewer.get_camera_state(),
+      getModel: (event) => this._manipulationModel(options.getModelId(event)),
+      getTool: options.getTool,
+      onMove: (id, position) => {
+        this.setPosition(id, position);
+        options.onChange?.(id);
+      },
+      onRotate: (id, rotation2) => {
+        this.setRotation(id, rotation2);
+        options.onChange?.(id);
+      },
+      onStart: (id) => {
+        arrangement = this._arrangement;
+        options.onStart?.(id);
+      },
+      onEnd: (id, cancelled) => {
+        if (cancelled) this._arrangement = arrangement;
+        options.onEnd?.(id, cancelled);
+      }
+    });
+    const handle = {
+      setEnabled: (value) => {
+        if (!disposed) binding.setEnabled(value);
+      },
+      dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        binding.dispose();
+        this._bindings.delete(handle);
+      }
+    };
+    this._bindings.add(handle);
+    return handle;
+  }
+  setArrangement(mode) {
+    this._assertActive();
+    if (!["original", "side-by-side", "custom"].includes(mode))
+      throw new TypeError("Unknown arrangement");
+    this._arrangement = mode;
+    for (const id of this._records.keys()) this._record(id);
+    if (mode === "custom") return;
+    for (const record of this._records.values()) {
+      this.prepareManual(record.id);
+      if (mode === "original") record.rotation = { ...record.originalRotation };
+    }
+    const records = [...this._records.values()], positions = scenePlacement(records, mode);
+    for (const { id, x, y, z } of positions) {
+      const r = this._records.get(id);
+      r.position = { x, y, z };
+      this._renderTransform(r);
+    }
+    this.setGrid(
+      this._grid.enabled,
+      this._grid.spacing,
+      sceneFloor(records, positions)
+    );
+    this._viewer?.set_auto_zoom();
+  }
+  setGrid(enabled, spacing = this._grid.spacing, height = this._grid.height) {
+    this._assertActive();
+    if (!Number.isFinite(spacing) || spacing <= 0 || !Number.isFinite(height))
+      throw new TypeError("Grid spacing must be positive and height finite");
+    this._viewer?.set_infinite_grid(enabled, spacing, height);
+    this._grid = { enabled: !!enabled, spacing, height };
+  }
+  duplicate(id) {
+    this._assertActive();
+    const original = this._record(id);
+    if (!original) throw new Error("Unknown model");
+    const copy = this._viewer.duplicate_model(id);
+    this._adopt(copy, { sourceFile: original.sourceFile }, true);
+    const record = this._records.get(copy);
+    record.animationPivot = original.animationPivot;
+    record.originalColor = original.originalColor;
+    this._nextID = Math.max(this._nextID, copy + 1);
+    this._arrangement = "custom";
+    return copy;
+  }
+  remove(id) {
+    this._assertActive();
+    if (!this._records.has(id)) return;
+    this._viewer.remove_model(id);
+    this._records.delete(id);
+    this.setArrangement(this._arrangement);
+  }
+  openFiles(files) {
+    this._assertActive();
     const accepted = [];
     for (const source of files) {
-      if (!/\.(stl|obj|3mf|step|stp|iges|igs|vsb|vsj)$/i.test(source.name)) {
-        showNotice(
-          "Choose STL, OBJ, 3MF, STEP/STP, IGES/IGS, VSB or VSJ files."
+      if (!formats.test(source.name))
+        this._error(
+          failure("unsupported-format", "Unsupported model or scene format"),
+          source
         );
-        continue;
-      }
-      if (source.size === 0) {
-        showNotice("This file is empty. Choose a file containing a 3D model.");
-        continue;
-      }
-      accepted.push(source);
+      else if (source.size === 0)
+        this._error(failure("empty-file", "The file is empty"), source);
+      else accepted.push(source);
     }
     const scenes = accepted.filter((f) => sceneFormat(f.name));
     if (scenes.length) {
@@ -6234,161 +4802,130 @@ function mountViewstlApp(root, options = {}) {
         failed: false
       };
       for (const sceneFile of scenes)
-        queue.push({ name: sceneFile.name, sceneFile, batch });
-      queue.push({ remaining: batch });
-    } else queue.push(...accepted);
-    if (queue.length && !draining) drainPromise = drainQueue();
-    return drainPromise || Promise.resolve();
+        this._queue.push({ name: sceneFile.name, sceneFile, batch });
+      this._queue.push({ remaining: batch });
+    } else this._queue.push(...accepted);
+    return this._drain();
   }
-  function openURL(value, format2 = "") {
-    assertActive();
-    if (!options.url_import_endpoint)
-      throw new Error("URL imports are not configured.");
-    const url = new URL2(value.trim());
+  openURL(value, format = "") {
+    this._assertActive();
+    if (!this._options.viewer_options?.url_import_endpoint)
+      throw new Error("URL imports are not configured");
+    const url = new URL(value.trim());
     if (!["https:", "http:"].includes(url.protocol) || url.username || url.password)
       throw new Error(
         "Use a public HTTP or HTTPS file URL without login credentials."
       );
-    if (format2 && !/^(stl|obj|3mf|step|stp|iges|igs|vsb|vsj)$/.test(format2))
-      throw new Error("Choose a supported 3D format.");
+    if (format && !/^(stl|obj|3mf|step|stp|iges|igs|vsb|vsj)$/.test(format))
+      throw new Error("Unsupported model or scene format");
     url.hash = "";
     const name = decodeURIComponent(
       url.pathname.split("/").at(-1) || "Remote model"
     ).slice(0, 200);
-    queue.push({
+    this._queue.push({
       name,
       remote: url.href,
-      format: format2,
+      format,
       size: 0,
-      scene: ["vsb", "vsj"].includes(format2) ? format2 : sceneFormat(name)
+      scene: ["vsb", "vsj"].includes(format) ? format : sceneFormat(name)
     });
-    if (!draining) drainPromise = drainQueue();
-    return drainPromise || Promise.resolve();
+    return this._drain();
   }
-  if ($("url-form") && $("url-dialog")) {
-    listen($("url-form"), "submit", (event) => {
-      event.preventDefault();
-      try {
-        const work = openURL($("url-input").value, $("url-format").value);
-        $("url-input").value = "";
-        $("url-error").hidden = true;
-        $("url-dialog").close();
-        work.catch((error) => showNotice(error.message));
-      } catch (error) {
-        $("url-error").textContent = error.message;
-        $("url-error").hidden = false;
-      }
-    });
+  _drain() {
+    if (!this._drainPromise && this._queue.length) {
+      this._drainPromise = Promise.resolve().then(() => this._drainQueue());
+    }
+    return this._drainPromise || Promise.resolve();
   }
-  async function drainQueue() {
-    if (draining) return;
-    draining = true;
+  async _drainQueue() {
     try {
-      while (queue.length) {
-        const source = queue.shift(), token = generation;
+      while (true) {
+        if (!this._queue.length) {
+          this._setBusy(false);
+          if (!this._queue.length) break;
+        }
+        const source = this._queue.shift(), token = this._generation;
         if (source.remaining) {
           if (!source.remaining.failed)
-            queue.unshift(
+            this._queue.unshift(
               ...source.remaining.files.filter(
                 (f) => !source.remaining.used.has(f)
               )
             );
           continue;
         }
-        setBusy(true);
-        $("notice").hidden = true;
-        $("loading-label").textContent = "Opening " + source.name + "\u2026";
-        announce("Opening " + source.name);
+        this._setBusy(true);
+        this._emit({ type: "opening", name: source.name });
         try {
           if (source.sceneFile || source.scene) {
-            await openSceneSource(source, token);
+            await this._openScene(source, token);
             continue;
           }
           const estimated = await estimateFile(source);
-          if (token !== generation) continue;
-          const resident = [...records.values()].reduce(
+          if (token !== this._generation) continue;
+          const resident = [...this._records.values()].reduce(
             (sum, r) => sum + r.estimated,
             0
           );
-          if (estimated + resident > policy.budget || source.size > policy.limits.max_file_bytes)
-            throw Error(
-              `Adding this file would exceed the estimated ${fileSize(policy.budget)} scene memory budget. Remove a model or try a device with more memory.`
+          if (estimated + resident > this._policy.budget || source.size > this._policy.limits.max_file_bytes)
+            throw failure(
+              "memory-budget",
+              "Estimated scene memory budget exceeded"
             );
-          const engine = await getViewer();
-          if (token !== generation) continue;
-          engine.do_resize();
-          nextID = Math.max(nextID, engine.max_model_id + 1);
-          const id = nextID++;
-          loadingID = id;
-          lastLoadedID = null;
-          engine.add_model({
+          const viewer = await this.ready();
+          if (token !== this._generation) continue;
+          viewer.do_resize();
+          this._nextID = Math.max(this._nextID, viewer.max_model_id + 1);
+          const id = this._nextID++;
+          this._loadingID = id;
+          this._lastLoadedID = null;
+          viewer.add_model({
             id,
             display: "flat",
             ...source.remote ? { remote_url: source.remote, remote_format: source.format } : source.url ? { filename: source.url } : { local_file: source }
           });
-          await engine.when_idle();
-          if (token !== generation) continue;
-          loadingID = null;
-          const loaded = lastLoadedID === id ? engine.get_model_info(id, { measurements: false }) : null;
-          if (!loaded) {
-            announce(source.name + " could not be opened.");
+          await viewer.when_idle();
+          if (token !== this._generation) continue;
+          this._loadingID = null;
+          if (this._lastLoadedID !== id) {
+            this._emit({ type: "load-failed", name: source.name });
             continue;
           }
-          if (source.remote) {
-            source.name = loaded.name;
-            source.size = loaded.file_bytes;
-            delete source.remote;
-          }
-          const embedded = loaded.has_colors, originalColor = embedded ? null : palette[records.size % palette.length];
-          if (originalColor) engine.set_color(id, originalColor);
-          records.set(id, {
-            id,
-            name: source.name,
-            size: source.size,
-            units: loaded.source_units || (/\.3mf$/i.test(source.name) ? "mm" : null),
-            bounds: loaded.bounds,
-            position: { x: 0, y: 0, z: 0 },
-            rotation: { x: 0, y: 0, z: 0 },
-            embedded,
-            originalColor,
-            color: originalColor,
-            estimated: loaded.triangles * 224,
-            sourceFile: source instanceof window2.File ? source : null
+          const loaded = viewer.get_model_info(id, { measurements: false });
+          const colors = this._options.colors || [];
+          if (!loaded.has_colors && colors.length)
+            viewer.set_color(id, colors[this._records.size % colors.length]);
+          this._adopt(id, {
+            name: source.remote ? loaded.name : source.name,
+            size: source.remote ? loaded.file_bytes : source.size,
+            sourceFile: typeof source.slice === "function" ? source : null
           });
-          modelID = id;
-          appearanceRequest++;
-          arrangeScene();
-          renderScene();
-          announce(source.name + " is ready.");
-          engine.canvas.focus({ preventScroll: true });
+          this.setArrangement(this._arrangement);
+          this._emit({ type: "loaded", id, name: this._records.get(id).name });
         } catch (error) {
           if (source.batch) source.batch.failed = true;
-          if (token === generation) {
-            if (loadingID !== null) {
-              viewer?.remove_model(loadingID);
-              loadingID = null;
-            }
-            showNotice(
-              /WebGL/i.test(error.message) ? "3D viewing needs WebGL 2. Try enabling hardware acceleration in your browser, or use another device." : error.message
-            );
+          if (token === this._generation) {
+            if (this._loadingID !== null)
+              this._viewer?.remove_model(this._loadingID);
+            this._loadingID = null;
+            this._error(error, source);
           }
         }
       }
     } finally {
-      draining = false;
-      setBusy(false);
+      this._drainPromise = null;
+      if (this._busy) this._setBusy(false);
     }
   }
-  async function openSceneSource(source, token) {
-    const engine = await getViewer();
-    if (token !== generation) return;
-    const controller = new window2.AbortController();
-    sceneImport = controller;
+  async _openScene(source, token) {
+    const viewer = await this.ready();
+    if (token !== this._generation) return;
+    const controller = this._sceneImport = new AbortController();
     try {
       const chosen = source.batch?.files || [];
       const cached = [
         ...new Set(
-          [...records.values()].map((r) => r.sourceFile).filter(Boolean)
+          [...this._records.values()].map((r) => r.sourceFile).filter(Boolean)
         )
       ];
       const companions = [
@@ -6397,498 +4934,69 @@ function mountViewstlApp(root, options = {}) {
           (f) => !chosen.some((s) => s.name === f.name) && cached.filter((s) => s.name === f.name).length === 1
         ) : []
       ];
-      const result = await engine.import_scene(
+      const result = await viewer.import_scene(
         source.sceneFile || source.remote,
         {
           format: source.scene || sceneFormat(source.name),
           signal: controller.signal,
           files: companions,
-          on_progress(p) {
-            if (token !== generation || disposed) return;
-            $("loading-label").textContent = p.phase === "opening-model" ? `Opening scene model ${p.loaded + 1} of ${p.total}\u2026` : p.phase === "complete" ? "Restoring scene\u2026" : p.total ? `Reading scene\u2026 ${Math.min(99, Math.floor(p.loaded / p.total * 100))}%` : "Reading scene\u2026";
+          on_progress: (progress) => {
+            if (token === this._generation)
+              this._emit({ type: "progress", scene: true, progress });
           }
         }
       );
-      if (token !== generation) return;
+      if (token !== this._generation) return;
       for (const file of result.used_files) source.batch?.used.add(file);
       for (const id of result.model_ids) {
-        const m = engine._models.get(id), g = m.geometry;
-        const bounds = Object.fromEntries(
-          ["min", "max"].map((key) => [
-            key,
-            g.bounds[key].map((v, i) => (v - m.center[i]) * m.scaleVector[i])
-          ])
-        );
-        const record = {
+        const m = viewer._models.get(id);
+        this._adopt(
           id,
-          name: String(m.display_name || m.orig_filename || m.filename).split(/[\\/]/).pop().split(/[?#]/)[0],
-          size: g.file_bytes ?? m.local_file?.size ?? null,
-          units: g.units || m.units,
-          bounds,
-          position: { x: 0, y: 0, z: 0 },
-          rotation: {
-            x: m.rotationx * 180 / Math.PI,
-            y: m.rotationy * 180 / Math.PI,
-            z: m.rotationz * 180 / Math.PI
+          {
+            sourceFile: result.used_files.includes(m.local_file) ? m.local_file : null
           },
-          embedded: !!g.colors,
-          color: m.color || (g.colors ? null : "#909090"),
-          estimated: g.triangles * 224,
-          sourceFile: result.used_files.includes(m.local_file) ? m.local_file : null
-        };
-        const offset = enginePosition(record);
-        for (const axis of ["x", "y", "z"])
-          record.position[axis] = m[axis] - offset[axis];
-        record.originalPosition = { ...record.position };
-        record.originalRotation = { ...record.rotation };
-        record.originalColor = record.color;
-        records.set(id, record);
-      }
-      nextID = Math.max(nextID, engine.max_model_id + 1);
-      modelID = result.model_ids.at(-1);
-      appearanceRequest++;
-      $("scene-arrangement").value = "custom";
-      gridEnabled = !!engine.grid;
-      gridHeight = engine.grid?.height || 0;
-      gridSpacing = engine.grid?.spacing || 1;
-      $("grid-button").setAttribute("aria-pressed", String(gridEnabled));
-      setBackground(engine.bg_color);
-      renderScene();
-      announce(
-        source.name + " opened. " + result.model_ids.length + " models added."
-      );
-      engine.canvas.focus({ preventScroll: true });
-    } finally {
-      if (sceneImport === controller) sceneImport = null;
-    }
-  }
-  root.querySelectorAll("[data-open-file]").forEach((b) => listen(b, "click", () => $("file-input").click()));
-  for (const button of shortcutButtons)
-    listen(button, "click", () => {
-      if (button.disabled || busy || !records.size) return;
-      const action = button.dataset.viewstlShortcut;
-      if (action === "save") $("save-button")?.click();
-      else if (action === "select") {
-        setSelectionMode(!selectionMode);
-        closePanels();
-        announce(
-          selectionMode ? "Selection mode. Click a model to select; drag to move. Done or Escape returns to viewing." : "Viewing mode. Drag to rotate the scene."
+          true
         );
-      } else if ([
-        "front",
-        "back",
-        "left",
-        "right",
-        "top",
-        "bottom",
-        "isometric"
-      ].includes(action)) {
-        setMoveMode(false);
-        setSelectionMode(false);
-        viewer.set_camera_view(action);
-        toolsUI?.sync();
-        announce(button.title || action + " view");
       }
-    });
-  listen(window2, "resize", () => {
-    if (selectionMode && !shortcutButtons.some(
-      (button) => button.dataset.viewstlShortcut === "select" && button.getClientRects().length
-    ))
-      setSelectionMode(false);
-  });
-  listen($("file-input"), "change", () => {
-    const files = [...$("file-input").files];
-    $("file-input").value = "";
-    addFiles(files);
-  });
-  $("sample-button").hidden = !sampleURL;
-  listen($("sample-button"), "click", () => {
-    if (sampleURL)
-      void addFiles([
-        { name: options.sample_name || "Sample.stl", url: sampleURL }
-      ]);
-  });
-  listen($("close-model"), "click", () => removeModel(modelID));
-  listen($("cancel-load"), "click", cancelLoading);
-  listen($("clear-scene"), "click", clearScene);
-  listen($("dismiss-notice"), "click", () => {
-    $("notice").hidden = true;
-  });
-  listen($("fit-button"), "click", () => viewer?.set_auto_zoom());
-  listen($("scene-arrangement"), "change", arrangeScene);
-  listen($("model-list"), "click", (event) => {
-    const b = event.target.closest("button");
-    if (!b) return;
-    if (b.dataset.removeModel !== void 0)
-      removeModel(Number(b.dataset.removeModel));
-    else if (b.dataset.selectModel !== void 0)
-      selectModel(Number(b.dataset.selectModel));
-    else if (b.dataset.colorModel !== void 0) {
-      selectModel(Number(b.dataset.colorModel));
-      togglePanel("colors");
-    }
-  });
-  async function applyView() {
-    if (modelID === null || busy) return;
-    const request = ++appearanceRequest;
-    const display = modeInputs.find((input) => input.checked).value;
-    modeInputs.forEach((input) => {
-      input.disabled = true;
-    });
-    $("smooth-shading").disabled = true;
-    $("view-status").textContent = "Preparing view\u2026";
-    $("notice").hidden = true;
-    try {
-      viewer.set_view(modelID, {
-        display,
-        smooth_shading: $("smooth-shading").checked
-      });
-      await viewer.when_idle();
-    } finally {
-      if (request === appearanceRequest) {
-        syncControls();
-        announce($("view-label").textContent + " view ready.");
-      }
-    }
-  }
-  modeInputs.forEach((input) => listen(input, "change", applyView));
-  listen($("smooth-shading"), "change", applyView);
-  for (const name of panelNames) {
-    listen($(name + "-button"), "click", () => {
-      if (name === "info") populateInfo();
-      togglePanel(name);
-      if (name === "section" && !$("section-panel").hidden && !$("section-enabled").checked) {
-        $("section-enabled").checked = true;
-        applySection();
-      }
-    });
-    listen($("close-" + name), "click", () => {
-      closePanel(name);
-      if (name === "colors") {
-        togglePanel("view");
-      }
-      $(name + "-button").focus();
-    });
-  }
-  function applySection() {
-    if (modelID === null) return;
-    const enabled = $("section-enabled").checked;
-    viewer.set_section(
-      modelID,
-      enabled ? {
-        axis: $("section-axis").value,
-        position: Number($("section-position").value) / 100,
-        flip: $("section-flip").getAttribute("aria-pressed") === "true"
-      } : null
-    );
-    $("section-value").textContent = $("section-position").value + "%";
-    $("section-button").setAttribute("aria-pressed", String(enabled));
-  }
-  listen($("section-enabled"), "change", applySection);
-  listen($("section-axis"), "change", applySection);
-  listen($("section-position"), "input", applySection);
-  listen($("section-flip"), "click", () => {
-    $("section-flip").setAttribute(
-      "aria-pressed",
-      String($("section-flip").getAttribute("aria-pressed") !== "true")
-    );
-    applySection();
-  });
-  listen($("grid-button"), "click", () => {
-    gridEnabled = !gridEnabled;
-    updateGrid();
-  });
-  function setColor(color) {
-    if (modelID === null) return;
-    viewer.set_color(modelID, color);
-    records.get(modelID).color = color;
-    syncColors();
-    renderList();
-  }
-  listen($("model-color"), "input", () => setColor($("model-color").value));
-  listen(
-    $("restore-color"),
-    "click",
-    () => setColor(records.get(modelID)?.originalColor)
-  );
-  root.querySelectorAll("[data-model-color]").forEach((b) => listen(b, "click", () => setColor(b.dataset.modelColor)));
-  function setBackground(color) {
-    background = color;
-    const rgb = color === "transparent" ? [255, 255, 255] : [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
-    $("workspace").classList.toggle(
-      "dark-background",
-      rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722 < 115
-    );
-    viewer?.set_bg_color(color);
-    syncColors();
-  }
-  listen(
-    $("background-color"),
-    "input",
-    () => setBackground($("background-color").value)
-  );
-  root.querySelectorAll("[data-background]").forEach(
-    (b) => listen(b, "click", () => setBackground(b.dataset.background))
-  );
-  listen($("image-button"), "click", async () => {
-    if (modelID === null) return;
-    const name = records.size > 1 ? "viewstl-scene.png" : records.get(modelID).name.replace(/\.[^.]+$/, "") + ".png";
-    try {
-      const blob = await viewer.get_image_blob("image/png");
-      if (disposed) return;
-      const url = URL2.createObjectURL(blob), link = document2.createElement("a");
-      link.href = url;
-      link.download = name;
-      link.click();
-      setTimeout(() => URL2.revokeObjectURL(url), 1e3);
-      announce("Image ready to download.");
-    } catch {
-      showNotice("The image could not be saved. Please try again.");
-    }
-  });
-  let dragDepth = 0;
-  const acceptedDrag = (event) => {
-    const kind = dropKind(event.dataTransfer);
-    if (kind === "files") return kind;
-    if (!options.url_import_endpoint || event.target?.isContentEditable || event.target?.closest?.("input, textarea"))
-      return null;
-    return kind;
-  };
-  const clearDrop = () => {
-    dragDepth = 0;
-    $("drop-overlay").hidden = true;
-  };
-  listen(dropTarget, "dragenter", (event) => {
-    if (acceptedDrag(event)) {
-      event.preventDefault();
-      dragDepth++;
-      $("drop-overlay").hidden = false;
-    }
-  });
-  listen(dropTarget, "dragover", (event) => {
-    if (acceptedDrag(event)) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "copy";
-    }
-  });
-  listen(dropTarget, "dragleave", (event) => {
-    if (dragDepth > 0 && --dragDepth === 0) clearDrop();
-  });
-  listen(dropTarget, "drop", (event) => {
-    const kind = acceptedDrag(event);
-    clearDrop();
-    if (!kind) return;
-    event.preventDefault();
-    try {
-      if (kind === "files")
-        addFiles([...event.dataTransfer.files]).catch(
-          (error) => showNotice(error.message)
-        );
-      else
-        for (const url of droppedURLs(event.dataTransfer))
-          openURL(url).catch((error) => showNotice(error.message));
-    } catch (error) {
-      showNotice(error.message);
-    }
-  });
-  listen(dropTarget, "dragend", clearDrop);
-  listen(window2, "blur", clearDrop);
-  root.querySelectorAll("[data-dialog]").forEach((b) => listen(b, "click", () => $(b.dataset.dialog).showModal()));
-  root.querySelectorAll("dialog").forEach(
-    (dialog) => listen(dialog, "click", (event) => {
-      if (event.target === dialog) {
-        const r = dialog.getBoundingClientRect();
-        if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom)
-          if (dialog === $("save-dialog")) exportUI.close();
-          else dialog.close();
-      }
-    })
-  );
-  listen(root, "keydown", (event) => {
-    if (event.key !== "Escape") return;
-    if ($("save-dialog")?.open) return;
-    if (selectionMode) {
-      setSelectionMode(false);
-      closePanels();
-      announce("Viewing mode. Drag to rotate the scene.");
-      return;
-    }
-    if (moveMode) {
-      setMoveMode(false);
-      announce("Move tool closed.");
-      return;
-    }
-    const active = panelNames.find((name) => !$(name + "-panel").hidden);
-    if (active) {
-      closePanels();
-      if (active === "colors") togglePanel("view");
-      $(active + "-button").focus();
-    }
-  });
-  listen(root, "pointerdown", (event) => {
-    if (!event.target.closest(
-      ".view-panel,.info-panel,.toolbar,.scene-heading-button,.move-mode"
-    ))
-      closePanels();
-  });
-  $("memory-budget").textContent = `Scene memory budget: ${fileSize(policy.budget)}. Half of ${policy.reported ? "the memory estimate reported by your browser" : "a conservative 2 GiB estimate because this browser does not report device memory"} is kept in reserve. This is an estimate, not a guarantee of available memory.`;
-  $("scene-arrangement").value = "original";
-  $("notice").hidden = true;
-  $("drop-overlay").hidden = true;
-  if ($("save-button"))
-    exportUI = bindAppExport({
-      $,
-      listen,
-      window: window2,
-      getState: () => ({
-        busy,
-        selectedId: modelID,
-        models: [...records.values()]
-      }),
-      getViewer: () => viewer,
-      onOpen: () => {
-        setMoveMode(false);
-        closePanels();
-      },
-      announce
-    });
-  if ($("print-button"))
-    printUI = bindAppPrint({
-      $,
-      listen,
-      window: window2,
-      getState: () => ({
-        busy,
-        selectedId: modelID,
-        models: [...records.values()]
-      }),
-      getViewer: () => viewer,
-      onOpen: () => {
-        setMoveMode(false);
-        closePanels();
-      },
-      announce
-    });
-  if ($("animation-details"))
-    animationUI = bindAppAnimation({
-      $,
-      listen,
-      window: window2,
-      getState: () => ({
-        busy,
-        selectedId: modelID,
-        models: [...records.values()]
-      }),
-      getViewer: () => viewer,
-      beforePlay(id) {
-        setMoveMode(false);
-        prepareManual(id);
-        centerAnimationPivot(records.get(id), viewer._models.get(id));
-        $("scene-arrangement").value = "custom";
-      },
-      refreshPose: refreshAnimatedPose,
-      announce
-    });
-  if ($("size-details"))
-    toolsUI = bindAppTools({
-      $,
-      listen,
-      window: window2,
-      getViewer: () => viewer,
-      getState: () => ({ selectedId: modelID, busy }),
-      refresh: renderScene,
-      announce,
-      changeSize(operation) {
-        setMoveMode(false);
-        const record = records.get(modelID);
-        syncAnimatedRecord(record, viewer._models.get(modelID));
-        operation();
-        syncAnimatedRecord(record, viewer._models.get(modelID));
-        $("scene-arrangement").value = "custom";
-        renderScene();
-      },
-      duplicate() {
-        const original = records.get(modelID), id = viewer.duplicate_model(modelID), m = viewer._models.get(id);
-        const record = {
-          ...original,
-          id,
-          name: m.display_name,
-          position: { ...original.position },
-          rotation: { ...original.rotation }
-        };
-        syncAnimatedRecord(record, m);
-        record.originalPosition = { ...record.position };
-        record.originalRotation = { ...record.rotation };
-        records.set(id, record);
-        nextID = Math.max(nextID, id + 1);
-        $("scene-arrangement").value = "custom";
-        selectModel(id);
-        setMoveMode(true, "move", true);
-        announce("Copy selected at the same position. Drag to move it.");
-      }
-    });
-  updateGrid();
-  setBusy(false);
-  setMoveMode(false);
-  const api = {
-    openFiles: addFiles,
-    openURL,
-    cancelLoading() {
-      assertActive();
-      cancelLoading();
-    },
-    clear() {
-      assertActive();
-      clearScene();
-    },
-    select(id) {
-      assertActive();
-      selectModel(id);
-    },
-    remove(id) {
-      assertActive();
-      removeModel(id);
-    },
-    getState() {
-      assertActive();
-      for (const record of records.values())
-        syncAnimatedRecord(record, viewer?._models.get(record.id));
-      return {
-        selectedId: modelID,
-        busy,
-        arrangement: $("scene-arrangement").value,
-        memoryBudget: policy.budget,
-        models: [...records.values()].map((record) => ({
-          id: record.id,
-          name: record.name,
-          size: record.size,
-          units: record.units,
-          position: { ...record.position },
-          rotation: { ...record.rotation },
-          color: record.color,
-          animation: viewer.get_model_animation_state(record.id)
-        }))
+      this._nextID = Math.max(this._nextID, viewer.max_model_id + 1);
+      this._arrangement = "custom";
+      this._grid = {
+        enabled: !!viewer.grid,
+        spacing: viewer.grid?.spacing || 1,
+        height: viewer.grid?.height || 0
       };
-    },
-    dispose() {
-      if (disposed) return;
-      exportUI?.dispose();
-      printUI?.dispose();
-      animationUI?.dispose();
-      toolsUI?.dispose();
-      cancelLoading();
-      setMoveMode(false);
-      appearanceRequest++;
-      disposed = true;
-      abort.abort();
-      modelMover?.dispose();
-      viewer?.dispose();
-      records.clear();
-      if (options.id_prefix)
-        modeInputs.forEach((input) => input.name = "view-mode");
-      mountedRoots.delete(root);
+      this._emit({
+        type: "scene-loaded",
+        name: source.name,
+        ids: result.model_ids
+      });
+    } finally {
+      if (this._sceneImport === controller) this._sceneImport = null;
     }
-  };
-  mountedRoots.set(root, api);
-  return api;
-}
+  }
+  cancelLoading() {
+    this._assertActive();
+    this._generation++;
+    this._queue.length = 0;
+    this._sceneImport?.abort();
+    if (this._loadingID !== null) this._viewer?.remove_model(this._loadingID);
+    this._loadingID = null;
+    this._setBusy(false);
+  }
+  clear() {
+    this.cancelLoading();
+    for (const binding of this._bindings) binding.setEnabled(false);
+    this._viewer?.clean();
+    this._records.clear();
+    this._arrangement = "original";
+    this.setGrid(false, 1, 0);
+  }
+  dispose() {
+    if (this._disposed) return;
+    this.cancelLoading();
+    for (const binding of this._bindings) binding.dispose();
+    this._disposed = true;
+    this._viewer?.dispose();
+    this._records.clear();
+  }
+};

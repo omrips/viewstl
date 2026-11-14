@@ -3,4 +3,4 @@ StlViewer.workerURL = new URL("./viewstl.worker.js", import.meta.url).href;
 export { StlViewer };
 export default StlViewer;
 
-export { mountViewstlApp } from "./app.js";
+export { ViewerSession } from "./session.js";
