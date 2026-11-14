@@ -82,7 +82,7 @@ export function bindModelMove(
       blocked.add(e.pointerId);
       return;
     }
-    const model = getModel();
+    const model = getModel(e);
     if (!model) return;
     drag = {
       tool: getTool(),

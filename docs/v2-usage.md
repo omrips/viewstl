@@ -242,10 +242,13 @@ buttons do not add required control IDs, so existing app layouts remain valid.
 Use real buttons with descriptive labels/tooltips. The host supplies responsive
 CSS; the ViewSTL website shows its shortcut row only on wide desktop screens.
 
-`select` toggles click-to-select mode and reflects it through `aria-pressed`.
-Camera gestures pause in this mode; clicking a model opens its existing tools.
-Escape, a camera shortcut or entering a model transform tool exits selection
-mode. A viewport resize also exits when all selection shortcuts become hidden.
+`select` toggles model selection/editing and reflects it through `aria-pressed`.
+It opens the compact Move/Rotate/Depth box immediately, starting with Move.
+Camera gestures pause; a click selects a model, and dragging a model selects
+and manipulates it with the current tool. Empty-canvas drags do nothing.
+Changing the tool or selected model keeps the compact box open. Turning Select
+off, Done, Escape or a camera shortcut hides it and restores camera controls.
+A viewport resize also exits when all selection shortcuts become hidden.
 This is temporary interaction state, not a saved scene property. The existing
 double-click and Models-list selection mechanisms remain available.
 

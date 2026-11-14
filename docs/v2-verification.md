@@ -3,6 +3,20 @@
 This file records dated checks. Older sections describe the alpha at the time
 of each check; release-candidate results are recorded separately below.
 
+## rc.8 selection-tool verification — 2026-11-14
+
+Selection mode opens the compact tool box with Move active. The website passed
+54 desktop-shortcut checks, including retargeting, Move/Rotate/Depth drags,
+unchanged camera/unselected models, empty-space drags, fresh-session defaults,
+Select-off/Done/Escape, cancellation during dragging and narrow-screen exit.
+Existing animation (25), model tools (25) and app lifecycle (24) checks passed.
+Tests used headless Windows Edge 157.0.4341.46; narrow/touch cases are emulation.
+No physical mobile, Safari or Firefox validation is claimed for this change.
+
+147 unit tests, strict browser/Node type checks and all 37 legacy hashes pass.
+Evidence: website `results/selection-tools-20261114/`, plugin
+`test-results/rc8-tests.txt` and the staged rc.8 package verification artifacts.
+
 ## rc.7 release candidate verification — 2026-11-14
 
 The desktop app shortcuts and VSB binary MIME fix pass 147 unit tests, strict

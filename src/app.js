@@ -180,7 +180,6 @@ export function mountViewstlApp(root, options = {}) {
     gridSpacing = 1,
     moveMode = false,
     selectionMode = false,
-    selectionPointer = null,
     transformTool = "move",
     modelMover,
     dragArrangement,
@@ -232,21 +231,12 @@ export function mountViewstlApp(root, options = {}) {
     }
   }
   function setSelectionMode(enabled) {
-    if (enabled) setMoveMode(false);
     selectionMode = !!enabled && !busy && records.size > 0;
-    selectionPointer = null;
-    if (viewer) {
-      viewer.controls.enabled = !selectionMode;
-      viewer.canvas.setAttribute(
-        "aria-label",
-        selectionMode
-          ? "Select a model with a click. Escape returns to viewing."
-          : "3D model viewer. Drag to rotate, shift-drag to pan, scroll to zoom.",
-      );
-    }
     $("workspace").classList.toggle("selecting-model-mode", selectionMode);
+    // Selecting and manipulating models share the compact tool box. Merely
+    // enabling it must not stop an animation before a manual interaction.
+    setMoveMode(selectionMode, "move", true);
     syncShortcuts();
-    syncSelection();
   }
   function editModelAt(event) {
     const hit = viewer.pick_model(event.clientX, event.clientY);
@@ -445,10 +435,12 @@ export function mountViewstlApp(root, options = {}) {
   function selectModel(id) {
     exportUI?.close();
     if (!records.has(id)) return;
-    setMoveMode(false);
+    if (selectionMode) modelMover?.setEnabled(false);
+    else setMoveMode(false);
     appearanceRequest++;
     modelID = id;
     renderScene();
+    if (selectionMode) setMoveMode(true, transformTool, true);
   }
   function placements() {
     return scenePlacement([...records.values()], $("scene-arrangement").value);
@@ -586,13 +578,20 @@ export function mountViewstlApp(root, options = {}) {
     }
     $("model-tool").value = transformTool;
     $("move-gesture-message").textContent =
-      toolHints[transformTool] + " · Scroll to adjust depth";
+      (selectionMode ? "Click a model to select · " : "") +
+      toolHints[transformTool] +
+      " · Scroll to adjust depth";
   }
   function setMoveMode(enabled, tool = transformTool, retainPaused = false) {
-    if (enabled && selectionMode) setSelectionMode(false);
     modelMover?.setEnabled(false);
     transformTool = tool;
     moveMode = !!enabled && modelID !== null && !busy;
+    if (!moveMode && selectionMode) {
+      selectionMode = false;
+      $("workspace").classList.remove("selecting-model-mode");
+    }
+    if (viewer) viewer.controls.enabled = !selectionMode;
+    syncShortcuts();
     if (moveMode && !retainPaused) prepareManual(modelID);
     modelMover?.setEnabled(moveMode);
     syncTool();
@@ -603,11 +602,10 @@ export function mountViewstlApp(root, options = {}) {
       viewer.canvas.setAttribute(
         "aria-label",
         moveMode
-          ? toolHints[transformTool] +
+          ? (selectionMode ? "Click a model to select. " : "") +
+              toolHints[transformTool] +
               ". Scroll changes only its depth. Escape exits."
-          : selectionMode
-            ? "Select a model with a click. Escape returns to viewing."
-            : "3D model viewer. Drag to rotate, shift-drag to pan, scroll to zoom.",
+          : "3D model viewer. Drag to rotate, shift-drag to pan, scroll to zoom.",
       );
     if (moveMode) {
       closePanels();
@@ -686,10 +684,12 @@ export function mountViewstlApp(root, options = {}) {
   root
     .querySelectorAll("[data-transform-tab]")
     .forEach((b) =>
-      listen(b, "click", () => setMoveMode(false, b.dataset.transformTab)),
+      listen(b, "click", () =>
+        setMoveMode(selectionMode, b.dataset.transformTab, true),
+      ),
     );
   listen($("model-tool"), "change", () =>
-    setMoveMode(true, $("model-tool").value),
+    setMoveMode(true, $("model-tool").value, selectionMode),
   );
   for (const axis of ["x", "y", "z"]) {
     const input = $("position-" + axis);
@@ -863,7 +863,14 @@ export function mountViewstlApp(root, options = {}) {
           if (disposed) throw new Error("ViewSTL app is disposed");
           modelMover = bindModelMove(viewer.canvas, {
             getCamera: () => viewer.get_camera_state(),
-            getModel: selectedTransform,
+            getModel: (event) => {
+              if (selectionMode && event) {
+                const hit = viewer.pick_model(event.clientX, event.clientY);
+                if (!hit || !records.has(hit.id)) return null;
+                if (hit.id !== modelID) selectModel(hit.id);
+              }
+              return selectedTransform();
+            },
             getTool: () => transformTool,
             onRotate: (id, rotation) => applyRotation(id, rotation),
             onMove: (id, position) => applyPosition(id, position),
@@ -879,49 +886,6 @@ export function mountViewstlApp(root, options = {}) {
             if (busy || selectionMode || event.button !== 0) return;
             editModelAt(event);
           });
-          listen(viewer.canvas, "pointerdown", (event) => {
-            if (
-              !selectionMode ||
-              busy ||
-              event.button !== 0 ||
-              !event.isPrimary
-            )
-              return;
-            selectionPointer = {
-              id: event.pointerId,
-              x: event.clientX,
-              y: event.clientY,
-              moved: false,
-            };
-            viewer.canvas.focus({ preventScroll: true });
-            viewer.canvas.setPointerCapture(event.pointerId);
-            event.preventDefault();
-          });
-          listen(viewer.canvas, "pointermove", (event) => {
-            if (
-              selectionPointer?.id === event.pointerId &&
-              Math.hypot(
-                event.clientX - selectionPointer.x,
-                event.clientY - selectionPointer.y,
-              ) > 6
-            )
-              selectionPointer.moved = true;
-          });
-          listen(viewer.canvas, "pointerup", (event) => {
-            const pointer = selectionPointer;
-            selectionPointer = null;
-            if (
-              selectionMode &&
-              !busy &&
-              pointer?.id === event.pointerId &&
-              !pointer.moved
-            )
-              editModelAt(event);
-          });
-          for (const event of ["pointercancel", "lostpointercapture"])
-            listen(viewer.canvas, event, () => {
-              selectionPointer = null;
-            });
           return viewer;
         })
         .catch((error) => {
@@ -1239,7 +1203,7 @@ export function mountViewstlApp(root, options = {}) {
         closePanels();
         announce(
           selectionMode
-            ? "Selection mode. Click a model; Escape returns to viewing."
+            ? "Selection mode. Click a model to select; drag to move. Done or Escape returns to viewing."
             : "Viewing mode. Drag to rotate the scene.",
         );
       } else if (
