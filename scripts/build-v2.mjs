@@ -9,6 +9,12 @@ import {
 } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { buildCAD } from "./prepare-cad.mjs";
+const { version } = JSON.parse(
+  await readFile(new URL("../package.json", import.meta.url), "utf8"),
+);
+// Owner-requested attribution. Keep the date stable when rebuilding a release.
+// esbuild's output banner stays on line one, including in minified builds.
+const viewerBanner = `//=========== Stl Viewer v${version}, by Omri Rips, Viewstl.com, November 2026 ; admin@viewstl.com ===========`;
 const out = "build";
 await mkdir(out, { recursive: true });
 const chunks = resolve(out, "chunks");
@@ -28,12 +34,14 @@ await build({
   entryPoints: ["src/index.js"],
   format: "esm",
   outfile: `${out}/viewstl.js`,
+  banner: { js: viewerBanner },
 });
 await build({
   ...common,
   entryPoints: ["src/commonjs.js"],
   format: "cjs",
   outfile: `${out}/viewstl.cjs`,
+  banner: { js: viewerBanner },
 });
 await build({
   ...common,
@@ -41,6 +49,7 @@ await build({
   format: "iife",
   minify: true,
   outfile: `${out}/stl_viewer.min.js`,
+  banner: { js: viewerBanner },
 });
 await copyFile(`${out}/stl_viewer.min.js`, `${out}/viewstl.min.js`);
 await build({

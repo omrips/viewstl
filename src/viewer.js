@@ -146,7 +146,7 @@ function modelOptions(input) {
 }
 
 export class StlViewer {
-  static version = "2.0.0-rc.6";
+  static version = "2.0.0-rc.7";
   static workerURL = null;
   constructor(parent, options = {}) {
     if (!parent?.appendChild)
@@ -1798,7 +1798,8 @@ export class StlViewer {
         null,
         scene.files.map((f) => f.bin),
       );
-    return new Blob([await job], { type: "application/zip" });
+    // Keep the .vsb download name on platforms that infer extensions from MIME.
+    return new Blob([await job], { type: "application/octet-stream" });
   }
   download_vsb(filename = "1.vsb") {
     return this.get_vsb_blob()

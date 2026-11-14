@@ -179,6 +179,8 @@ export function mountViewstlApp(root, options = {}) {
     gridHeight = 0,
     gridSpacing = 1,
     moveMode = false,
+    selectionMode = false,
+    selectionPointer = null,
     transformTool = "move",
     modelMover,
     dragArrangement,
@@ -193,6 +195,7 @@ export function mountViewstlApp(root, options = {}) {
     orientation: "Face orientation",
   };
   const modeInputs = [...root.querySelectorAll('[name="view-mode"]')];
+  const shortcutButtons = [...root.querySelectorAll("[data-viewstl-shortcut]")];
   if (options.id_prefix)
     modeInputs.forEach(
       (input) => (input.name = options.id_prefix + "view-mode"),
@@ -212,9 +215,51 @@ export function mountViewstlApp(root, options = {}) {
   }
   function syncSelection() {
     viewer?.set_selection(
-      !busy && records.has(modelID) && (moveMode || !$("scene-panel").hidden)
+      !busy &&
+        records.has(modelID) &&
+        (selectionMode || moveMode || !$("scene-panel").hidden)
         ? modelID
         : null,
+    );
+  }
+  function syncShortcuts() {
+    for (const button of shortcutButtons) {
+      const action = button.dataset.viewstlShortcut;
+      button.disabled =
+        busy || !records.size || (action === "save" && !exportUI);
+      if (action === "select")
+        button.setAttribute("aria-pressed", String(selectionMode));
+    }
+  }
+  function setSelectionMode(enabled) {
+    if (enabled) setMoveMode(false);
+    selectionMode = !!enabled && !busy && records.size > 0;
+    selectionPointer = null;
+    if (viewer) {
+      viewer.controls.enabled = !selectionMode;
+      viewer.canvas.setAttribute(
+        "aria-label",
+        selectionMode
+          ? "Select a model with a click. Escape returns to viewing."
+          : "3D model viewer. Drag to rotate, shift-drag to pan, scroll to zoom.",
+      );
+    }
+    $("workspace").classList.toggle("selecting-model-mode", selectionMode);
+    syncShortcuts();
+    syncSelection();
+  }
+  function editModelAt(event) {
+    const hit = viewer.pick_model(event.clientX, event.clientY);
+    if (!hit || !records.has(hit.id)) return;
+    event.preventDefault();
+    selectModel(hit.id);
+    closePanels();
+    $("scene-panel").hidden = false;
+    $("scene-button").setAttribute("aria-expanded", "true");
+    $("position-details").open = true;
+    syncSelection();
+    announce(
+      records.get(hit.id).name + " selected. Choose Move, Rotate or Depth.",
     );
   }
   function closePanel(name) {
@@ -316,6 +361,7 @@ export function mountViewstlApp(root, options = {}) {
     printUI?.sync();
     animationUI?.sync();
     toolsUI?.sync();
+    syncShortcuts();
   }
   function populateInfo() {
     if (modelID === null) return;
@@ -368,6 +414,7 @@ export function mountViewstlApp(root, options = {}) {
   }
   function renderScene() {
     const has = records.size > 0;
+    if (!has && selectionMode) setSelectionMode(false);
     $("workspace").classList.toggle("has-models", has);
     $("viewer").hidden = !has && !busy;
     $("empty-state").hidden = has || busy;
@@ -388,6 +435,7 @@ export function mountViewstlApp(root, options = {}) {
   function setBusy(value) {
     if (value) exportUI?.close();
     if (disposed) return;
+    if (value && selectionMode) setSelectionMode(false);
     if (value) setMoveMode(false);
     busy = value;
     $("loading-state").hidden = !value;
@@ -541,6 +589,7 @@ export function mountViewstlApp(root, options = {}) {
       toolHints[transformTool] + " · Scroll to adjust depth";
   }
   function setMoveMode(enabled, tool = transformTool, retainPaused = false) {
+    if (enabled && selectionMode) setSelectionMode(false);
     modelMover?.setEnabled(false);
     transformTool = tool;
     moveMode = !!enabled && modelID !== null && !busy;
@@ -556,7 +605,9 @@ export function mountViewstlApp(root, options = {}) {
         moveMode
           ? toolHints[transformTool] +
               ". Scroll changes only its depth. Escape exits."
-          : "3D model viewer. Drag to rotate, shift-drag to pan, scroll to zoom.",
+          : selectionMode
+            ? "Select a model with a click. Escape returns to viewing."
+            : "3D model viewer. Drag to rotate, shift-drag to pan, scroll to zoom.",
       );
     if (moveMode) {
       closePanels();
@@ -825,21 +876,52 @@ export function mountViewstlApp(root, options = {}) {
             },
           });
           listen(viewer.canvas, "dblclick", (event) => {
-            if (busy || event.button !== 0) return;
-            const hit = viewer.pick_model(event.clientX, event.clientY);
-            if (!hit || !records.has(hit.id)) return;
-            event.preventDefault();
-            selectModel(hit.id);
-            closePanels();
-            $("scene-panel").hidden = false;
-            $("scene-button").setAttribute("aria-expanded", "true");
-            $("position-details").open = true;
-            syncSelection();
-            announce(
-              records.get(hit.id).name +
-                " selected. Choose Move, Rotate or Depth.",
-            );
+            if (busy || selectionMode || event.button !== 0) return;
+            editModelAt(event);
           });
+          listen(viewer.canvas, "pointerdown", (event) => {
+            if (
+              !selectionMode ||
+              busy ||
+              event.button !== 0 ||
+              !event.isPrimary
+            )
+              return;
+            selectionPointer = {
+              id: event.pointerId,
+              x: event.clientX,
+              y: event.clientY,
+              moved: false,
+            };
+            viewer.canvas.focus({ preventScroll: true });
+            viewer.canvas.setPointerCapture(event.pointerId);
+            event.preventDefault();
+          });
+          listen(viewer.canvas, "pointermove", (event) => {
+            if (
+              selectionPointer?.id === event.pointerId &&
+              Math.hypot(
+                event.clientX - selectionPointer.x,
+                event.clientY - selectionPointer.y,
+              ) > 6
+            )
+              selectionPointer.moved = true;
+          });
+          listen(viewer.canvas, "pointerup", (event) => {
+            const pointer = selectionPointer;
+            selectionPointer = null;
+            if (
+              selectionMode &&
+              !busy &&
+              pointer?.id === event.pointerId &&
+              !pointer.moved
+            )
+              editModelAt(event);
+          });
+          for (const event of ["pointercancel", "lostpointercapture"])
+            listen(viewer.canvas, event, () => {
+              selectionPointer = null;
+            });
           return viewer;
         })
         .catch((error) => {
@@ -1147,6 +1229,49 @@ export function mountViewstlApp(root, options = {}) {
   root
     .querySelectorAll("[data-open-file]")
     .forEach((b) => listen(b, "click", () => $("file-input").click()));
+  for (const button of shortcutButtons)
+    listen(button, "click", () => {
+      if (button.disabled || busy || !records.size) return;
+      const action = button.dataset.viewstlShortcut;
+      if (action === "save") $("save-button")?.click();
+      else if (action === "select") {
+        setSelectionMode(!selectionMode);
+        closePanels();
+        announce(
+          selectionMode
+            ? "Selection mode. Click a model; Escape returns to viewing."
+            : "Viewing mode. Drag to rotate the scene.",
+        );
+      } else if (
+        [
+          "front",
+          "back",
+          "left",
+          "right",
+          "top",
+          "bottom",
+          "isometric",
+        ].includes(action)
+      ) {
+        setMoveMode(false);
+        setSelectionMode(false);
+        viewer.set_camera_view(action);
+        toolsUI?.sync();
+        announce(button.title || action + " view");
+      }
+    });
+  listen(window, "resize", () => {
+    // Do not strand users in a desktop-only mode after rotating/narrowing a screen.
+    if (
+      selectionMode &&
+      !shortcutButtons.some(
+        (button) =>
+          button.dataset.viewstlShortcut === "select" &&
+          button.getClientRects().length,
+      )
+    )
+      setSelectionMode(false);
+  });
   listen($("file-input"), "change", () => {
     const files = [...$("file-input").files];
     $("file-input").value = "";
@@ -1383,6 +1508,12 @@ export function mountViewstlApp(root, options = {}) {
   listen(root, "keydown", (event) => {
     if (event.key !== "Escape") return;
     if ($("save-dialog")?.open) return;
+    if (selectionMode) {
+      setSelectionMode(false);
+      closePanels();
+      announce("Viewing mode. Drag to rotate the scene.");
+      return;
+    }
     if (moveMode) {
       setMoveMode(false);
       announce("Move tool closed.");

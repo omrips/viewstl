@@ -1,6 +1,6 @@
 {
   "name": "viewstl",
-  "version": "2.0.0-rc.6",
+  "version": "2.0.0-rc.7",
   "description": "Local-first STL, OBJ, 3MF, STEP and IGES viewer with native WebGL2 and transferable worker geometry",
   "type": "module",
   "license": "MIT",
@@ -62,7 +62,7 @@
     "docs/v2-usage.md",
     "docs/v2-compatibility.md",
     "docs/v2-verification.md",
-    "docs/releases/2.0.0-rc.6.md",
+    "docs/releases/2.0.0-rc.7.md",
     "legacy/README.md",
     "THIRD-PARTY-NOTICES.txt"
   ],

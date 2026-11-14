@@ -19,5 +19,7 @@ export function exportSceneArchive(scene, models, limits, progress) {
   progress({ loaded: models.length, total: models.length, phase: "packaging" });
   const bytes = zipScene({ vsj: scene, files }, limits);
   progress({ loaded: models.length, total: models.length, phase: "complete" });
-  return new Blob([bytes], { type: "application/zip" });
+  // VSB is a binary scene, even though its compatible container is ZIP.
+  // Advertising ZIP makes Android append .zip to the requested .vsb filename.
+  return new Blob([bytes], { type: "application/octet-stream" });
 }

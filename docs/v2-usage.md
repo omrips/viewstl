@@ -234,6 +234,21 @@ each layout's IDs and label/ARIA references and pass the matching `id_prefix`;
 the controller separates radio groups as well. `dispose()` permits remounting
 and prevents late reads from updating the new app.
 
+Optional shortcut buttons can reuse the app actions without extra host-side
+JavaScript. Use `data-open-file` for Open, and `data-viewstl-shortcut` with `save`,
+`select`, `front`, `right`, `top`, `back`, `left`, `bottom` or `isometric` for the
+other actions. Save requires the normal save-dialog control group. These
+buttons do not add required control IDs, so existing app layouts remain valid.
+Use real buttons with descriptive labels/tooltips. The host supplies responsive
+CSS; the ViewSTL website shows its shortcut row only on wide desktop screens.
+
+`select` toggles click-to-select mode and reflects it through `aria-pressed`.
+Camera gestures pause in this mode; clicking a model opens its existing tools.
+Escape, a camera shortcut or entering a model transform tool exits selection
+mode. A viewport resize also exits when all selection shortcuts become hidden.
+This is temporary interaction state, not a saved scene property. The existing
+double-click and Models-list selection mechanisms remain available.
+
 `openFiles()` accepts Files or configured `{name, url, size?}` sources and
 resolves when the queue settles. File errors appear in the notice; success is
 reflected by `getState().models`. Other methods are `select(id)`, `remove(id)`,

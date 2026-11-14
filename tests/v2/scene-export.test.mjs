@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import { exportSceneArchive } from "../../src/scene-export.js";
 import { exportFilename } from "../../src/export-options.js";
 import { DEFAULT_LIMITS } from "../../src/geometry.js";
-import { unzipChecked } from "../../src/archive.js";
+import { unzipChecked, zipScene } from "../../src/archive.js";
 import { parseGeometry } from "../../src/parser.js";
+import { StlViewer } from "../../src/viewer.js";
 
 const model = () => ({
   id: 7,
@@ -33,6 +34,7 @@ test("scene worker uses legacy VSB entries, transforms and colored STL", async (
   const blob = exportSceneArchive(scene, [input], DEFAULT_LIMITS, (p) =>
     progress.push(p),
   );
+  assert.equal(blob.type, "application/octet-stream");
   const files = unzipChecked(await blob.arrayBuffer());
   assert.deepEqual(
     JSON.parse(new TextDecoder().decode(files.get("json_data.vsj"))),
@@ -45,6 +47,29 @@ test("scene worker uses legacy VSB entries, transforms and colored STL", async (
   assert.deepEqual(
     progress.map((p) => p.phase),
     ["exporting", "packaging", "complete"],
+  );
+});
+test("compatibility VSB blob uses binary MIME without changing archive bytes", async () => {
+  const document = {
+    vsj: scene,
+    files: [{ id: 7, bin: new Uint8Array([1, 2, 3]).buffer }],
+  };
+  const bytes = zipScene(document, DEFAULT_LIMITS);
+  const viewer = Object.create(StlViewer.prototype);
+  viewer.when_ready = Promise.resolve();
+  viewer.limits = DEFAULT_LIMITS;
+  viewer.get_vsb = () => document;
+  viewer._pool = { run: () => Promise.resolve(bytes) };
+  const blob = await viewer.get_vsb_blob();
+  assert.equal(blob.type, "application/octet-stream");
+  assert.deepEqual(await blob.arrayBuffer(), bytes);
+  assert.deepEqual(
+    JSON.parse(
+      new TextDecoder().decode(
+        unzipChecked(await blob.arrayBuffer()).get("json_data.vsj"),
+      ),
+    ),
+    scene,
   );
 });
 test("scene worker enforces archive and compressed output limits", () => {

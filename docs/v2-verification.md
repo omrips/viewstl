@@ -3,6 +3,49 @@
 This file records dated checks. Older sections describe the alpha at the time
 of each check; release-candidate results are recorded separately below.
 
+## rc.7 release candidate verification — 2026-11-14
+
+The desktop app shortcuts and VSB binary MIME fix pass 147 unit tests, strict
+browser/Node type checks and the 37-file legacy integrity guard. Both staged
+package names pass browser and Node ESM/CommonJS import checks, package-content
+checks and the required first-line version/banner checks.
+
+The website candidate passed 43 shortcut checks in headless Windows Edge
+157.0.4341.46: Open/Save, all seven camera presets, unchanged model transforms,
+single-click selection without camera movement, drag rejection, keyboard
+toggle/Escape, resize exit, persistent print results, disabled empty-scene
+actions, and desktop/narrow/touch-only layouts. Another 26 scene-save and 25
+scene-open checks passed. Scene URL fixtures use mocked relay responses.
+Screens/touch are emulation; no physical Android, Safari or Firefox validation
+is claimed. The previously requested banner is included in rc.7.
+
+Evidence: website `results/desktop-shortcuts-20261114/` and plugin
+`test-results/desktop-shortcuts-20261114/` / `test-results/vsb-mime-20261114/`.
+The VSB section below records the earlier local checkpoint, before rc.7 staging.
+
+## VSB download MIME fix — 2026-11-14 (local, unpublished)
+
+The owner reported Android saving scenes as `name.vsb.zip`. Both the scene
+worker used by `export_scene` / `download_scene` and the compatibility
+`get_vsb_blob` / `download_vsb` path now return `application/octet-stream`
+instead of `application/zip`. The `.vsb` filename and ZIP container bytes are
+unchanged; existing VSB files remain compatible. Actual OBJ ZIP exports still
+use their ZIP MIME type.
+
+All 147 unit tests pass and the 37-file legacy integrity guard passes. A real
+worker/download check in headless Windows Edge 157.0.4341.46 verified binary
+MIME for both VSB APIs, reopened both two-model scenes with positions preserved,
+and downloaded `android-scene.vsb` without console errors. Evidence is in
+`test-results/vsb-mime-20261114/` and `test-results/vsb-mime-tests-20261114.log`.
+Android download behavior still requires a physical-device retest. A file
+manager that inspects the bytes may continue recognizing the ZIP container.
+
+The build is updated locally, including the previously approved author banner.
+The package version remains rc.6 for this unpublished working tree; do not
+overwrite the existing registry artifact. Production/preview still use the
+published rc.6 package and have not received this fix. A new plugin version
+and website deployment are needed to ship it.
+
 ## npm names and installation — 2026-11-07
 
 Published `viewstl@2.0.0-rc.5` and `@omrips/viewstl@2.0.0-rc.5` with `latest`
