@@ -1,6 +1,6 @@
 # ViewSTL 2 — native WebGL2 plugin
 
-Version: `2.0.0-rc.9` (ViewSTL v2.00 release candidate, GitHub and npm).
+Version: `2.0.0-rc.10` (ViewSTL v2.00 release candidate, GitHub and npm).
 On `main`, the new plugin is in `src/` and `build/`; the legacy tree is in
 `legacy/v1/`. The unchanged `master` branch retains original legacy paths.
 The v2 website is live at https://www.viewstl.com/; https://preview.viewstl.com/
@@ -8,7 +8,7 @@ is its staging site. This guide documents the plugin, which you can host indepen
 
 ## Quick start
 
-Download the plugin ZIP from the [GitHub release](https://github.com/omrips/viewstl/releases/tag/v2.0.0-rc.9),
+Download the plugin ZIP from the [GitHub release](https://github.com/omrips/viewstl/releases/tag/v2.0.0-rc.10),
 then copy its complete `build/` folder to `/viewstl-v2/` on your website.
 Paste these three lines into your page's `<body>`:
 
@@ -398,8 +398,8 @@ the plugin repository or npm package. Ordinary `StlViewer` integrations keep the
 
 - WebGL2 only; no CanvasRenderer, WebGL1 or IE fallback.
 - No Three.js or other third-party library in the STL/OBJ rendering core.
-- ASCII/binary STL, VisCAM/MeshLab and Materialise colors, plus the legacy
-  ViewSTL colored-STL convention.
+- ASCII/binary STL, including face colors from legacy ViewSTL exports, the
+  `STL File color` header, VisCAM/SolidView (including MeshLab) and Materialise Magics.
 - OBJ polygon fan triangulation and negative indices. OBJ materials,
   textures and robust triangulation of concave polygons are not included.
 - Core 3MF meshes, nested components, build transforms, units, base
@@ -757,7 +757,7 @@ const result = await viewer.export_models({
   filename: 'assembly',            // correct extension added/replaced automatically
   units: 'mm',                    // mm (default), inch
   apply_transforms: true,          // default: bake position, rotation, scale and centering
-  colors: true,                   // default for OBJ/3MF; ignored for STL/STEP/IGES
+  colors: true,                   // opt in for STL; default for OBJ/3MF
   signal: controller.signal,
   on_progress({ loaded, total, phase }) {
     // Triangle counts. phase is 'exporting' or 'complete'.
@@ -788,11 +788,16 @@ STL and OBJ have no standardized units; OBJ includes an informational comment.
 
 | Format | Output and scope |
 | --- | --- |
-| STL | Standard binary STL; selected meshes combined into one triangle stream. Attributes are zero, so no ambiguous vendor color encoding. |
+| STL | Standard binary STL by default. With `colors: true`, writes legacy ViewSTL face colors to the same `.stl` extension. Selected meshes are combined into one triangle stream. |
 | OBJ | With `colors: true`, a ZIP containing `model.obj` and `materials.mtl`, including object groups, face normals, per-face colors and opacity. Vertex colors are averaged per face and colors/opacity quantized to 8-bit channels. With `colors: false`, a plain `.obj` file. |
 | 3MF | ZIP/XML package with separate mesh objects, indexed vertices, units and per-vertex color/opacity using the Materials extension. Requires non-degenerate triangles, paired consistently oriented edges, and positive volume. Open/inconsistently wound meshes reject; there is no automatic repair or full self-intersection validation. |
 | STEP | AP214 `AUTOMOTIVE_DESIGN`: separate named products made of planar triangle faces in open shells. Exact displayed mesh coordinates are written; this is a surface model, not a reconstructed CAD solid. |
 | IGES | IGES 5.3 bounded planes (108/form 1) with closed 3D polylines (106/form 12). Models use separate levels. Triangle surfaces, not stitched CAD solids. |
+
+For colored STL, call `viewer.download_models({ format: 'stl', colors: true, model_ids: [0] })`.
+Each face stores one RGB color at 5 bits per channel, averaged from its vertices
+or taken from the model's color override. STL has no standard color field.
+Other viewers may ignore these colors, and the export carries no opacity.
 
 STEP/IGES preserve mesh geometry and placement, but omit colors, textures,
 analytic curves, original CAD topology/assemblies and feature history. They work

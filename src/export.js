@@ -13,12 +13,18 @@ import {
   progressReporter,
 } from "./export-utils.js";
 
-function writeSTL(models, budget, tick) {
+function writeSTL(models, options, budget, tick) {
   const count = models.reduce((n, m) => n + m.positions.length / 9, 0);
   if (count > 0xffffffff) throw new Error("STL triangle count limit exceeded");
   budget.add(84 + count * 50);
   const header = new Uint8Array(84);
-  header.set(new TextEncoder().encode("Binary STL by ViewSTL 2"));
+  header.set(
+    new TextEncoder().encode(
+      options.colors
+        ? "Binary colored STL by viewstl.com"
+        : "Binary STL by ViewSTL 2",
+    ),
+  );
   new DataView(header.buffer).setUint32(80, count, true);
   const parts = [header];
   let block,
@@ -40,7 +46,13 @@ function writeSTL(models, budget, tick) {
           throw new Error("STL coordinate exceeds float32 range");
         view.setFloat32(offset + k * 4, values[k], true);
       }
-      // Standard binary STL: the attribute byte count is zero (no ambiguous color extension).
+      if (options.colors) {
+        // Legacy ViewSTL uses RGB555, red in the low bits and bit 15 clear.
+        const [r, g, b] = faceColor(model, i).map((channel) =>
+          Math.round(channel * 31),
+        );
+        view.setUint16(offset + 48, r | (g << 5) | (b << 10), true);
+      }
       offset += 50;
       written++;
       tick();
@@ -269,9 +281,10 @@ export async function exportGeometry(
             if (!Number.isFinite(v) || v < 0 || v > 1)
               throw new Error("Invalid export colors");
       if (
-        !Number.isFinite(model.opacity) ||
-        model.opacity < 0 ||
-        model.opacity > 1
+        options.format !== "stl" &&
+        (!Number.isFinite(model.opacity) ||
+          model.opacity < 0 ||
+          model.opacity > 1)
       )
         throw new Error("Invalid export opacity");
     }
@@ -294,7 +307,7 @@ export async function exportGeometry(
   );
   const tick = progressReporter(triangles, progress);
   let blob;
-  if (options.format === "stl") blob = writeSTL(models, budget, tick);
+  if (options.format === "stl") blob = writeSTL(models, options, budget, tick);
   else if (options.format === "obj")
     blob = await writeOBJ(models, options, budget, limits, tick);
   else if (options.format === "3mf")

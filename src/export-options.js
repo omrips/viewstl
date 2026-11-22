@@ -31,7 +31,10 @@ export function exportOptions(options = {}) {
     typeof options.on_progress !== "function"
   )
     throw new Error("on_progress must be a function");
-  const colors = options.colors !== false && ["obj", "3mf"].includes(format);
+  const colors =
+    format === "stl"
+      ? options.colors === true
+      : options.colors !== false && ["obj", "3mf"].includes(format);
   const extension = format === "obj" && colors ? "zip" : format;
   return {
     format,

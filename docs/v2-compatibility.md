@@ -1,6 +1,6 @@
 # Native WebGL2 plugin: compatibility requirements
 
-Status: v2 implemented; release candidate `2.0.0-rc.9`. This document records the requirements, updated for the approved main-branch layout;
+Status: v2 implemented; release candidate `2.0.0-rc.10`. This document records the requirements, updated for the approved main-branch layout;
 see [usage and intentional differences](v2-usage.md) for the implemented
 contract and [verification](v2-verification.md) for actual test coverage.
 

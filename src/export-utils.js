@@ -100,14 +100,12 @@ export const hexColor = (c, opacity = 1) =>
     )
     .join("")
     .toUpperCase();
-export const faceColor = (m, offset) =>
-  [0, 1, 2].map(
-    (a) =>
-      (vertexColor(m, offset)[a] +
-        vertexColor(m, offset + 3)[a] +
-        vertexColor(m, offset + 6)[a]) /
-      3,
-  );
+export function faceColor(model, offset) {
+  const a = vertexColor(model, offset),
+    b = vertexColor(model, offset + 3),
+    c = vertexColor(model, offset + 6);
+  return a.map((value, channel) => (value + b[channel] + c[channel]) / 3);
+}
 
 export function progressReporter(total, callback) {
   let done = 0;

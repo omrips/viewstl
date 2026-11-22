@@ -3,6 +3,14 @@
 This file records dated checks. Older sections describe the alpha at the time
 of each check; release-candidate results are recorded separately below.
 
+## rc.10 colored binary STL — 2026-11-22
+
+The legacy colored cube retains all 12 face colors in both the buffered and
+chunked parsers. The original ViewSTL parser loads the rc.10 STL color export
+with all 12 colors intact. Export tests cover black faces, vertex color
+averaging, model color overrides and plain STL defaults. All 146 plugin tests,
+browser and Node TypeScript checks, and the 37 legacy-file hashes passed.
+
 ## rc.9 website/plugin separation — 2026-11-14
 
 The four browser/CJS/classic distributions contain no website controller,

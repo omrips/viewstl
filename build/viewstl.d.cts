@@ -40,7 +40,7 @@ export interface ExportOptions {
   units?: Units;
   /** Default true. False exports source coordinates plus unit conversion only. */
   apply_transforms?: boolean;
-  /** Default true for OBJ/3MF. Colored OBJ returns a ZIP with OBJ and MTL. */
+  /** Defaults to true for OBJ/3MF and false for STL. Colored STL uses legacy 5-bit RGB face colors. Colored OBJ returns a ZIP with OBJ and MTL. */
   colors?: boolean;
   signal?: AbortSignal;
   on_progress?: (progress: ExportProgress) => void;

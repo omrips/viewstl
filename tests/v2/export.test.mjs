@@ -5,7 +5,7 @@ import { exportGeometry } from "../../src/export.js";
 import { exportOptions } from "../../src/export-options.js";
 import { DEFAULT_LIMITS, finishGeometry } from "../../src/geometry.js";
 import { identity, modelMatrix, transform } from "../../src/math.js";
-import { parseGeometry } from "../../src/parser.js";
+import { parseBinarySTLBlob, parseGeometry } from "../../src/parser.js";
 import { parse3MF, unzipChecked } from "../../src/archive.js";
 import { cadGeometry } from "../../src/cad.js";
 import { StlViewer } from "../../src/viewer.js";
@@ -82,6 +82,65 @@ test("binary STL encodes all transforms, recomputes normals and leaves input int
   assert.deepEqual(m.positions, before);
   assert.equal(new DataView(data).getUint16(132, true), 0);
   assert.deepEqual(events.at(-1), { loaded: 12, total: 12, phase: "complete" });
+});
+
+test("legacy color-marked STL loads face colors through both parser paths", async () => {
+  const bytes = await readFile(
+    new URL("./data/legacy-colored-cube.stl", import.meta.url),
+  );
+  const data = Uint8Array.from(bytes).buffer;
+  const buffered = parseGeometry(data, "cube.stl");
+  const chunked = await parseBinarySTLBlob(
+    new Blob([data]),
+    limits,
+    () => {},
+    3,
+  );
+  assert.equal(buffered.triangles, 12);
+  assert.deepEqual(chunked.colors, buffered.colors);
+  const attributes = [0x7c1a, 0x03f6, 0x02df, 0x7e00, 0x03fc, 0x241f];
+  for (const [face, attr] of attributes.entries()) {
+    const color = new Float32Array(
+      [attr & 31, (attr >> 5) & 31, (attr >> 10) & 31].map(
+        (channel) => channel / 31,
+      ),
+    );
+    assert.deepEqual(buffered.colors.slice(face * 18, face * 18 + 3), color);
+    assert.deepEqual(
+      buffered.colors.slice(face * 18 + 9, face * 18 + 12),
+      color,
+    );
+  }
+});
+
+test("STL color export is opt-in and round-trips legacy RGB555 face colors", async () => {
+  const mesh = cube();
+  mesh.colors = new Float32Array(mesh.positions.length);
+  mesh.colors.set([1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1]);
+  mesh.colors.set([1, 0, 0, 0, 1, 0, 0, 0, 1], 18);
+  const tinted = { ...cube(1), color: [0, 1, 0] };
+  const result = await exportGeometry([mesh, tinted], {
+    format: "stl",
+    colors: true,
+    filename: "cube",
+  });
+  assert.equal(result.filename, "cube.stl");
+  const data = await result.blob.arrayBuffer();
+  const header = new TextDecoder().decode(data.slice(0, 80));
+  assert.ok(header.startsWith("Binary colored STL by viewstl.com"));
+  const view = new DataView(data);
+  assert.deepEqual(
+    [0, 1, 2, 3, 12].map((face) => view.getUint16(132 + face * 50, true)),
+    [0x001f, 0x7c00, 0x294a, 0, 0x03e0],
+  );
+  const parsed = parseGeometry(data, result.filename);
+  assert.deepEqual([...parsed.colors.slice(0, 3)], [1, 0, 0]);
+  assert.deepEqual([...parsed.colors.slice(9, 12)], [0, 0, 1]);
+  assert.deepEqual([...parsed.colors.slice(27, 30)], [0, 0, 0]);
+  const standard = await exportGeometry([mesh], { format: "stl" });
+  const plain = await standard.blob.arrayBuffer();
+  assert.equal(new DataView(plain).getUint16(132, true), 0);
+  assert.equal(parseGeometry(plain, standard.filename).colors, null);
 });
 
 test("STL reflects winding and keeps outward normals", async () => {

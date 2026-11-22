@@ -1,4 +1,4 @@
-//=========== Stl Viewer v2.0.0-rc.9, by Omri Rips, Viewstl.com, November 2026 ; admin@viewstl.com ===========
+//=========== Stl Viewer v2.0.0-rc.10, by Omri Rips, Viewstl.com, November 2026 ; admin@viewstl.com ===========
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -2140,7 +2140,7 @@ function exportOptions(options = {}) {
       throw new Error(`${key} must be a boolean`);
   if (options.on_progress !== void 0 && typeof options.on_progress !== "function")
     throw new Error("on_progress must be a function");
-  const colors = options.colors !== false && ["obj", "3mf"].includes(format);
+  const colors = format === "stl" ? options.colors === true : options.colors !== false && ["obj", "3mf"].includes(format);
   const extension = format === "obj" && colors ? "zip" : format;
   return {
     format,
@@ -2370,7 +2370,7 @@ function modelOptions(input) {
   return out;
 }
 var StlViewer = class _StlViewer {
-  static version = "2.0.0-rc.9";
+  static version = "2.0.0-rc.10";
   static workerURL = null;
   constructor(parent, options = {}) {
     if (!parent?.appendChild)

@@ -7,10 +7,14 @@ export function binaryWriter(count, header, limits, inputBytes = 0) {
   assertMemory(limits, MEMORY_OVERHEAD + inputBytes + count * TRIANGLE_MEMORY);
   const positions = new Float32Array(count * 9);
   let colors = null;
-  const text = new TextDecoder().decode(header),
+  // An STL header can contain raw bytes. Keep string indices aligned with byte offsets.
+  const text = String.fromCharCode(...header),
     ci = text.indexOf("COLOR=");
   const magics = ci >= 0 && ci + 10 <= 80;
-  const legacy = /^Binary colored STL by viewstl\.com/i.test(text);
+  const legacy =
+    /^(?:Binary colored STL by viewstl\.com|STL File color)(?=[\s\0]|$)/i.test(
+      text,
+    );
   const fallback = magics
     ? [...header.subarray(ci + 6, ci + 9)].map((v) => v / 255)
     : [144 / 255, 144 / 255, 144 / 255];
